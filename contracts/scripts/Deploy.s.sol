@@ -4,12 +4,6 @@ pragma solidity ^0.8.16;
 import {Script} from "forge-std/Script.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IJBDelegatesRegistry} from "@jbx-protocol/juice-delegates-registry/src/interfaces/IJBDelegatesRegistry.sol";
-import {JBTokens} from "@jbx-protocol/juice-contracts-v3/contracts/libraries/JBTokens.sol";
-import {IJBController3_1} from "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBController3_1.sol";
-import {IJBOperatable} from "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBOperatable.sol";
-import {IJBTiered721DelegateStore} from
-    "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJBTiered721DelegateStore.sol";
 import {DefifaDelegate} from "../DefifaDelegate.sol";
 import {DefifaDeployer} from "../DefifaDeployer.sol";
 import {DefifaGovernor} from "../DefifaGovernor.sol";

@@ -8,11 +8,6 @@ import "../DefifaDelegate.sol";
 import "../DefifaDeployer.sol";
 import "../DefifaTokenUriResolver.sol";
 
-import "@jbx-protocol/juice-721-delegate/contracts/forge-test/utils/TestBaseWorkflow.sol";
-import "@jbx-protocol/juice-delegates-registry/src/JBDelegatesRegistry.sol";
-import "@jbx-protocol/juice-721-delegate/contracts/structs/JBDeployTiered721DelegateData.sol";
-import "@jbx-protocol/juice-721-delegate/contracts/structs/JBLaunchProjectData.sol";
-import "@jbx-protocol/juice-721-delegate/contracts/JBTiered721DelegateStore.sol";
 
 // contract DefifaGovernorTest is TestBaseWorkflow {
 //     using JBFundingCycleMetadataResolver for JBFundingCycle;

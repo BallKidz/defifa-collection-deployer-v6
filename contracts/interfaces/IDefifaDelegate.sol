@@ -2,25 +2,17 @@
 pragma solidity ^0.8.16;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IJBFundingCycleStore} from "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBFundingCycleStore.sol";
-import {IJBDirectory} from "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBDirectory.sol";
-import {IJB721Delegate} from "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJB721Delegate.sol";
-import {IJBTiered721DelegateStore} from
-    "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJBTiered721DelegateStore.sol";
-import {IJB721TokenUriResolver} from "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJB721TokenUriResolver.sol";
-import {JB721TierParams} from "@jbx-protocol/juice-721-delegate/contracts/structs/JB721TierParams.sol";
-import {JBTiered721SetTierDelegatesData} from
-    "@jbx-protocol/juice-721-delegate/contracts/structs/JBTiered721SetTierDelegatesData.sol";
-import {JBTiered721MintReservesForTiersData} from
-    "@jbx-protocol/juice-721-delegate/contracts/structs/JBTiered721MintReservesForTiersData.sol";
-import {JBTiered721MintForTiersData} from
-    "@jbx-protocol/juice-721-delegate/contracts/structs/JBTiered721MintForTiersData.sol";
-import {JB721PricingParams} from "@jbx-protocol/juice-721-delegate/contracts/structs/JB721PricingParams.sol";
+import "@bananapus/core-v5/src/interfaces/IJBRulesets.sol";
+import '@bananapus/721-hook-v5/src/interfaces/IJB721Hook.sol';
+import '@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol';
+import '@bananapus/721-hook-v5/src/structs/JB721TiersMintReservesConfig.sol';
+import {JB721InitTiersConfig} from "@bananapus/721-hook-v5/src/structs/JB721InitTiersConfig.sol";
 import {DefifaTierRedemptionWeight} from "./../structs/DefifaTierRedemptionWeight.sol";
+import {DefifaDelegation} from "./../structs/DefifaDelegation.sol";
 import {IDefifaGamePhaseReporter} from "./IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./IDefifaGamePotReporter.sol";
 
-interface IDefifaDelegate is IJB721Delegate {
+interface IDefifaDelegate is IJB721Hook {
     event Mint(
         uint256 indexed tokenId,
         uint256 indexed tierId,
@@ -61,9 +53,9 @@ interface IDefifaDelegate is IJB721Delegate {
 
     function redemptionWeightIsSet() external view returns (bool);
 
-    function store() external view returns (IJBTiered721DelegateStore);
+    function store() external view returns (IJB721TiersHookStore);
 
-    function fundingCycleStore() external view returns (IJBFundingCycleStore);
+    function fundingCycleStore() external view returns (IJBRulesets);
 
     function gamePhaseReporter() external view returns (IDefifaGamePhaseReporter);
 
@@ -104,11 +96,11 @@ interface IDefifaDelegate is IJB721Delegate {
 
     function setTierDelegateTo(address delegatee, uint256 tierId) external;
 
-    function setTierDelegatesTo(JBTiered721SetTierDelegatesData[] memory setTierDelegatesData) external;
+    function setTierDelegatesTo(DefifaDelegation[] memory delegations) external;
 
     function setTierRedemptionWeightsTo(DefifaTierRedemptionWeight[] memory tierWeights) external;
 
-    function mintReservesFor(JBTiered721MintReservesForTiersData[] memory mintReservesForTiersData) external;
+    function mintReservesFor(JB721TiersMintReservesConfig[] memory mintReservesForTiersData) external;
 
     function mintReservesFor(uint256 tierId, uint256 count) external;
 
@@ -117,13 +109,13 @@ interface IDefifaDelegate is IJB721Delegate {
         IJBDirectory directory,
         string memory name,
         string memory symbol,
-        IJBFundingCycleStore fundingCycleStore,
+        IJBRulesets fundingCycleStore,
         string memory baseUri,
         IJB721TokenUriResolver tokenUriResolver,
         string memory contractUri,
-        JB721TierParams[] memory tiers,
+        JB721InitTiersConfig [] memory tiers,
         uint48 currency,
-        IJBTiered721DelegateStore store,
+        IJB721TiersHookStore store,
         IDefifaGamePhaseReporter gamePhaseReporter,
         IDefifaGamePotReporter gamePotReporter,
         address defaultAttestationDelegate,

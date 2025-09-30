@@ -1,7 +1,6 @@
 @openzeppelin=node_modules/@openzeppelin/
-@paulrberg=node_modules/@paulrberg/
-@jbx-protocol=node_modules/@jbx-protocol/
-prb-math=node_modules/prb-math/
+@prb/math/=node_modules/@prb/math/
+@bananapus/=node_modules/@bananapus/
 ds-test/=lib/forge-std/lib/ds-test/src/
 forge-std/=lib/forge-std/src/
 scripty.sol=node_modules/scripty.sol/

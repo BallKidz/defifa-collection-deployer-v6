@@ -10,11 +10,11 @@
   "version": "1.0.43",
   "license": "MIT",
   "dependencies": {
-    "@jbx-protocol/juice-contracts-v3": "^3.1.2",
-    "@jbx-protocol/juice-721-delegate": "^7.0.0",
-    "@jbx-protocol/juice-delegates-registry": "^1.0.1",
-    "@openzeppelin/contracts": "^4.7.3",
-    "@prb/math": "^4.0.0",
+    "@bananapus/721-hook-v5": "^0.0.3",
+    "@bananapus/address-registry-v5": "^0.0.2",
+    "@bananapus/core-v5": "^0.0.4",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@prb/math": "^4.1.0",
     "scripty.sol": "^1.0.2"
   },
   "devDependencies": {

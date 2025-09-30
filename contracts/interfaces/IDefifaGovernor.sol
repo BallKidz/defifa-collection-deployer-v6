@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {IJBController3_1} from "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBController3_1.sol";
 import {DefifaScorecardState} from "../enums/DefifaScorecardState.sol";
 import {DefifaTierRedemptionWeight} from "../structs/DefifaTierRedemptionWeight.sol";
 import {IDefifaDelegate} from "./IDefifaDelegate.sol";
