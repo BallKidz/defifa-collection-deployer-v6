@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {DefifaTierParams} from "./DefifaTierParams.sol";
-import {DefifaOpsData} from "./DefifaOpsData.sol";
+import {DefifaTierParams} from './DefifaTierParams.sol';
+import {DefifaOpsData} from './DefifaOpsData.sol';
+
+import {JBLaunchProjectConfig} from '@bananapus/721-hook-v5/src/structs/JBLaunchProjectConfig.sol';
+import {IJB721TiersHookStore} from '@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol';
+import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
+import {IJBTerminal} from '@bananapus/core-v5/src/interfaces/IJBTerminal.sol';
+import {JBSplit} from '@bananapus/core-v5/src/structs/JBSplit.sol';
 
 /// @custom:member name The name of the game being created.
 /// @custom:member projectMetadata Metadata to associate with the project within a particular domain.
@@ -21,20 +27,20 @@ import {DefifaOpsData} from "./DefifaOpsData.sol";
 /// @custom:member terminal The payment terminal where the project will accept funds through.
 /// @custom:member store A contract to store standard JB721 data in.
 struct DefifaLaunchProjectData {
-    string name;
-    JBProjectMetadata projectMetadata;
-    string contractUri;
-    string baseUri;
-    DefifaTierParams[] tiers;
-    address token;
-    uint24 mintPeriodDuration;
-    uint24 refundPeriodDuration;
-    uint48 start;
-    JBSplit[] splits;
-    uint256 attestationStartTime;
-    uint256 attestationGracePeriod;
-    address defaultAttestationDelegate;
-    IJB721TokenUriResolver defaultTokenUriResolver;
-    IJBPaymentTerminal terminal;
-    IJBTiered721DelegateStore store;
+  string name;
+  JBLaunchProjectConfig launchProjectConfig;
+  string contractUri;
+  string baseUri;
+  DefifaTierParams[] tiers;
+  address token;
+  uint24 mintPeriodDuration;
+  uint24 refundPeriodDuration;
+  uint48 start;
+  JBSplit[] splits;
+  uint256 attestationStartTime;
+  uint256 attestationGracePeriod;
+  address defaultAttestationDelegate;
+  IJB721TokenUriResolver defaultTokenUriResolver;
+  IJBTerminal terminal;
+  IJB721TiersHookStore store;
 }

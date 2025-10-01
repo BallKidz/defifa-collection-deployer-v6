@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import {DefifaScorecardState} from "../enums/DefifaScorecardState.sol";
 import {DefifaTierRedemptionWeight} from "../structs/DefifaTierRedemptionWeight.sol";
 import {IDefifaDelegate} from "./IDefifaDelegate.sol";
+import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
 
 interface IDefifaGovernor {
     event GameInitialized(
@@ -24,7 +25,7 @@ interface IDefifaGovernor {
 
     function MAX_ATTESTATION_POWER_TIER() external view returns (uint256);
 
-    function controller() external view returns (IJBController3_1);
+    function controller() external view returns (IJBController);
 
     function defaultAttestationDelegateProposalOf(uint256 gameId) external view returns (uint256);
 

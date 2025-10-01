@@ -6,6 +6,11 @@ import {DefifaOpsData} from "../structs/DefifaOpsData.sol";
 import {IDefifaDelegate} from "./IDefifaDelegate.sol";
 import {IDefifaGovernor} from "./IDefifaGovernor.sol";
 
+import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
+import {JBSplit} from '@bananapus/core-v5/src/structs/JBSplit.sol';
+import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
+import {IJBAddressRegistry} from '@bananapus/address-registry-v5/src/interfaces/IJBAddressRegistry.sol';
+
 interface IDefifaDeployer {
     event LaunchGame(
         uint256 indexed gameId,
@@ -45,9 +50,9 @@ interface IDefifaDeployer {
 
     function governor() external view returns (IDefifaGovernor);
 
-    function controller() external view returns (IJBController3_1);
+    function controller() external view returns (IJBController);
 
-    function delegatesRegistry() external view returns (IJBDelegatesRegistry);
+    function registry() external view returns (IJBAddressRegistry);
 
     function feeDivisor() external view returns (uint256);
 

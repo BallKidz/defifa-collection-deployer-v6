@@ -2,6 +2,7 @@
 pragma solidity ^0.8.16;
 
 import "lib/base64/base64.sol";
+import "@prb/math/src/Common.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
@@ -9,6 +10,11 @@ import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
 import {IDefifaTokenUriResolver} from "./interfaces/IDefifaTokenUriResolver.sol";
 import {DefifaFontImporter} from "./libraries/DefifaFontImporter.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
+
+import {JBConstants} from '@bananapus/core-v5/src/libraries/JBConstants.sol';
+import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
+import {JB721Tier} from '@bananapus/721-hook-v5/src/structs/JB721Tier.sol';
+import {JBIpfsDecoder} from '@bananapus/721-hook-v5/src/libraries/JBIpfsDecoder.sol';
 
 /// @title DefifaTokenUriResolver
 /// @notice Standard Token URIs for Defifa games.
@@ -148,7 +154,7 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
                 }
 
                 if (_gamePhase == DefifaGamePhase.SCORING || _gamePhase == DefifaGamePhase.COMPLETE) {
-                    uint256 _potPortion = PRBMath.mulDiv(
+                    uint256 _potPortion = mulDiv(
                         _gamePot, _delegate.redemptionWeightOf(_tokenId), _delegate.TOTAL_REDEMPTION_WEIGHT()
                     );
                     _valueText = !_delegate.redemptionWeightIsSet()
@@ -256,7 +262,7 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
         view
         returns (string memory)
     {
-        bool _isEth = _token == JBTokens.ETH;
+        bool _isEth = _token == JBConstants.NATIVE_TOKEN;
 
         uint256 _fixedPoint = 10 ** _decimals;
 

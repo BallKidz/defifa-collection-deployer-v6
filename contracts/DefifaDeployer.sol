@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
+import "@prb/math/src/Common.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -18,6 +19,24 @@ import {DefifaTierParams} from "./structs/DefifaTierParams.sol";
 import {DefifaOpsData} from "./structs/DefifaOpsData.sol";
 import {DefifaDelegate} from "./DefifaDelegate.sol";
 import {DefifaTokenUriResolver} from "./DefifaTokenUriResolver.sol";
+
+import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
+import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
+import {IJBAddressRegistry} from '@bananapus/address-registry-v5/src/interfaces/IJBAddressRegistry.sol';
+import {IJBTerminal} from '@bananapus/core-v5/src/interfaces/IJBTerminal.sol';
+import {IJBMultiTerminal} from '@bananapus/core-v5/src/interfaces/IJBMultiTerminal.sol';
+import {JBAccountingContext} from '@bananapus/core-v5/src/structs/JBAccountingContext.sol';
+import {JBRulesetMetadata} from '@bananapus/core-v5/src/structs/JBRulesetMetadata.sol';
+import {JBSplit} from '@bananapus/core-v5/src/structs/JBSplit.sol';
+import {JBConstants} from '@bananapus/core-v5/src/libraries/JBConstants.sol';
+import {JBSplitGroup} from "@bananapus/core-v5/src/structs/JBSplitGroup.sol";
+import {IJBSplitHook} from '@bananapus/core-v5/src/interfaces/IJBSplitHook.sol';
+import {JB721Tier} from '@bananapus/721-hook-v5/src/structs/JB721Tier.sol';
+import {JB721TierConfig} from '@bananapus/721-hook-v5/src/structs/JB721TierConfig.sol';
+import {IJBDirectory} from '@bananapus/core-v5/src/interfaces/IJBDirectory.sol';
+import {JBSplitHookContext} from '@bananapus/core-v5/src/structs/JBSplitHookContext.sol';
+import "@bananapus/core-v5/src/interfaces/IJBRulesets.sol";
+
 
 /// @title DefifaDeployer
 /// @notice Deploys and manages Defifa games.
@@ -77,10 +96,10 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     IDefifaGovernor public immutable override governor;
 
     /// @notice The controller with which new projects should be deployed.
-    IJBController3_1 public immutable override controller;
+    IJBController public immutable override controller;
 
     /// @notice The delegates registry.
-    IJBDelegatesRegistry public immutable delegatesRegistry;
+    IJBAddressRegistry public immutable registry;
 
     //*********************************************************************//
     // --------------------- public stored properties -------------------- //
@@ -130,17 +149,20 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         address _token = _opsOf[_gameId].token;
 
         // Get a reference to the terminal.
-        IJBPaymentTerminal _terminal = controller.directory().primaryTerminalOf(_gameId, _token);
+        IJBTerminal _terminal = controller.directory().primaryTerminalOf(_gameId, _token);
+
+        // Get the accounting context for the project.
+        JBAccountingContext memory _context = _terminal.accountingContextForTokenOf(_gameId, _token);
 
         // Get the current balance.
-        uint256 _pot = IJBPayoutRedemptionPaymentTerminal3_1(address(_terminal)).store().balanceOf(
-            IJBSingleTokenPaymentTerminal(address(_terminal)), _gameId
+        uint256 _pot = IJBMultiTerminal(address(_terminal)).store().balanceOf(
+            address(_terminal), _gameId
         );
 
         // Add any fulfilled commitments.
         if (_includeCommitments) _pot += fulfilledCommitmentsOf[_gameId];
 
-        return (_pot, _token, IJBSingleTokenPaymentTerminal(address(_terminal)).decimals());
+        return (_pot, _token, _context.decimals);
     }
 
     /// @notice Whether or not the next phase still needs queuing.
@@ -148,9 +170,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @return Whether or not the next phase still needs queuing.
     function nextPhaseNeedsQueueing(uint256 _gameId) external view override returns (bool) {
         // Get the game's current funding cycle along with its metadata.
-        JBFundingCycle memory _currentFundingCycle = controller.fundingCycleStore().currentOf(_gameId);
+        JBRuleset memory _currentFundingCycle = controller.fundingCycleStore().currentOf(_gameId);
         // Get the game's queued funding cycle along with its metadata.
-        JBFundingCycle memory _queuedFundingCycle = controller.fundingCycleStore().queuedOf(_gameId);
+        JBRuleset memory _queuedFundingCycle = controller.fundingCycleStore().queuedOf(_gameId);
 
         // If the configurations are the same and the game hasn't ended, queueing is still needed.
         return _currentFundingCycle.duration != 0
@@ -167,7 +189,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @return The game phase.
     function currentGamePhaseOf(uint256 _gameId) public view override returns (DefifaGamePhase) {
         // Get the game's current funding cycle along with its metadata.
-        (JBFundingCycle memory _currentFundingCycle, JBFundingCycleMetadata memory _metadata) =
+        (JBRuleset memory _currentFundingCycle, JBRulesetMetadata memory _metadata) =
             controller.currentFundingCycleOf(_gameId);
 
         if (_currentFundingCycle.number == 0) return DefifaGamePhase.COUNTDOWN;
@@ -189,15 +211,15 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @param _tokenUriResolver The standard default token URI resolver.
     /// @param _governor The Defifa governor.
     /// @param _controller The controller to use to launch the game from.
-    /// @param _delegatesRegistry The contract storing references to the deployer of each delegate.
+    /// @param _registry The contract storing references to the deployer of each delegate.
     /// @param _defifaProjectId The ID of the project that should take the fee from the games.
     /// @param _baseProtocolProjectId The ID of the protocol project that'll receive fees from fulfilling commitments.
     constructor(
         address _delegateCodeOrigin,
         IJB721TokenUriResolver _tokenUriResolver,
         IDefifaGovernor _governor,
-        IJBController3_1 _controller,
-        IJBDelegatesRegistry _delegatesRegistry,
+        IJBController _controller,
+        IJBAddressRegistry _registry,
         uint256 _defifaProjectId,
         uint256 _baseProtocolProjectId
     ) {
@@ -205,7 +227,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         tokenUriResolver = _tokenUriResolver;
         governor = _governor;
         controller = _controller;
-        delegatesRegistry = _delegatesRegistry;
+        registry = _registry;
         defifaProjectId = _defifaProjectId;
         baseProtocolProjectId = _baseProtocolProjectId;
         splitGroup = uint256(uint160(address(this)));
@@ -285,12 +307,12 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                     projectId: defifaProjectId,
                     beneficiary: payable(address(this)),
                     lockedUntil: 0,
-                    allocator: IJBSplitAllocator(address(0))
+                    allocator: IJBSplitHook(address(0))
                 });
 
                 // Store the splits.
-                JBGroupedSplits[] memory _groupedSplits = new JBGroupedSplits[](1);
-                _groupedSplits[0] = JBGroupedSplits({group: splitGroup, splits: _splits});
+                JBSplitGroup[] memory _groupedSplits = new JBSplitGroup[](1);
+                _groupedSplits[0] = JBSplitGroup({group: splitGroup, splits: _splits});
 
                 // This contract must have SET_SPLITS (index 18) operator permissions.
                 controller.splitsStore().set(defifaProjectId, gameId, _groupedSplits);
@@ -301,7 +323,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _numberOfTiers = _launchProjectData.tiers.length;
 
         // Create the standard tiers struct that will be populated from the defifa tiers.
-        JB721TierParams[] memory _delegateTiers = new JB721TierParams[](
+        JB721TierConfig[] memory _delegateTiers = new JB721TierConfig[](
           _launchProjectData.tiers.length
         );
 
@@ -316,7 +338,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             _defifaTier = _launchProjectData.tiers[_i];
 
             // Set the tier.
-            _delegateTiers[_i] = JB721TierParams({
+            _delegateTiers[_i] = JB721TierConfig({
                 price: _defifaTier.price,
                 initialQuantity: 999_999_999, // The max allowed value.
                 votingUnits: 1,
@@ -382,7 +404,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         _delegate.transferOwnership(address(governor));
 
         // Add the delegate to the registry, contract nonce starts at 1
-        delegatesRegistry.addDelegate(address(this), ++_nonce);
+        registry.addDelegate(address(this), ++_nonce);
 
         emit LaunchGame(gameId, _delegate, governor, _uriResolver, msg.sender);
     }
@@ -392,7 +414,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @return configuration The configuration of the funding cycle that was successfully reconfigured.
     function queueNextPhaseOf(uint256 _gameId) external override returns (uint256 configuration) {
         // Get the game's current funding cycle along with its metadata.
-        (JBFundingCycle memory _currentFundingCycle, JBFundingCycleMetadata memory _metadata) =
+        (JBRuleset memory _currentFundingCycle, JBRulesetMetadata memory _metadata) =
             controller.currentFundingCycleOf(_gameId);
 
         // No more queuing once duration is set to 0.
@@ -405,7 +427,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Get the game's queued funding cycle.
-        (JBFundingCycle memory _queuedFundingCycle,) = controller.queuedFundingCycleOf(_gameId);
+        (JBRuleset memory _queuedFundingCycle,) = controller.queuedFundingCycleOf(_gameId);
 
         // Make sure the next game phase isn't already queued.
         if (_currentFundingCycle.configuration != _queuedFundingCycle.configuration) {
@@ -452,7 +474,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 projectId: defifaProjectId,
                 beneficiary: payable(address(this)),
                 lockedUntil: 0,
-                allocator: IJBSplitAllocator(address(0))
+                allocator: IJBSplitHook(address(0))
             });
         }
 
@@ -463,18 +485,18 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         IJBDirectory _directory = controller.directory();
 
         // Get a reference to the terminal being used.
-        IJBPaymentTerminal _terminal = _directory.primaryTerminalOf(_gameId, _token);
+        IJBTerminal _terminal = _directory.primaryTerminalOf(_gameId, _token);
 
         // Get the current pot.
-        uint256 _pot = IJBPayoutRedemptionPaymentTerminal3_1(address(_terminal)).store().balanceOf(
-            IJBSingleTokenPaymentTerminal(address(_terminal)), _gameId
+        uint256 _pot = IJBMultiTerminal(address(_terminal)).store().balanceOf(
+            address(_terminal), _gameId
         );
 
         // Get the decimals that make up the pot fixed point number.
-        uint256 _decimals = IJBSingleTokenPaymentTerminal(address(_terminal)).decimals();
+        uint256 _decimals  = _terminal.accountingContextForTokenOf(_gameId, _token).decimals;
 
         // Distribute the overflow allowance.
-        uint256 _leftoverAmount = IJBAllowanceTerminal3_1(address(_terminal)).useAllowanceOf({
+        uint256 _leftoverAmount = IJBMultiTerminal(address(_terminal)).useAllowanceOf({
             _projectId: _gameId,
             _amount: _pot,
             _currency: _terminal.currencyForToken(_token),
@@ -491,29 +513,29 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             JBSplit memory _split = _splits[i];
 
             // The amount to send towards the split.
-            uint256 _splitAmount = PRBMath.mulDiv(_pot, _split.percent, JBConstants.SPLITS_TOTAL_PERCENT);
+            uint256 _splitAmount = mulDiv(_pot, _split.percent, JBConstants.SPLITS_TOTAL_PERCENT);
 
             if (_splitAmount > 0) {
                 // Transfer tokens to the split.
                 // If there's an allocator set, transfer to its `allocate` function.
-                if (_split.allocator != IJBSplitAllocator(address(0))) {
+                if (_split.allocator != IJBSplitHook(address(0))) {
                     // Create the data to send to the allocator.
-                    JBSplitAllocationData memory _data = JBSplitAllocationData(
-                        _token, _splitAmount, _terminal.decimalsForToken(_token), _gameId, 0, _split
+                    JBSplitHookContext memory _data = JBSplitHookContext(
+                        _token, _splitAmount, _decimals, _gameId, 0, _split
                     );
 
                     // Approve the `_amount` of tokens for the split allocator to transfer tokens from this contract.
-                    if (_token != JBTokens.ETH) {
+                    if (_token != JBConstants.NATIVE_TOKEN) {
                         IERC20(_token).safeApprove(address(_split.allocator), _splitAmount);
                     }
 
                     // If the token is ETH, send it in msg.value.
-                    uint256 _payableValue = _token == JBTokens.ETH ? _splitAmount : 0;
+                    uint256 _payableValue = _token == JBConstants.NATIVE_TOKEN ? _splitAmount : 0;
 
                     // Trigger the allocator's `allocate` function.
                     try _split.allocator.allocate{value: _payableValue}(_data) {}
                     catch (bytes memory) {
-                        if (_token != JBTokens.ETH) {
+                        if (_token != JBConstants.NATIVE_TOKEN) {
                             IERC20(_token).safeDecreaseAllowance(address(_split.allocator), _splitAmount);
                         }
                         _splitAmount = 0;
@@ -522,12 +544,12 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                     // Otherwise, if a project is specified, make a payment to it.
                 } else if (_split.projectId != 0) {
                     // Find the terminal for the specified project.
-                    IJBPaymentTerminal _splitTerminal = _directory.primaryTerminalOf(_split.projectId, _token);
+                    IJBTerminal _splitTerminal = _directory.primaryTerminalOf(_split.projectId, _token);
 
                     // There must be a terminal.
                     if (
-                        _splitTerminal == IJBPaymentTerminal(address(0))
-                            || _splitTerminal.decimalsForToken(_token) != _decimals
+                        _splitTerminal == IJBTerminal(address(0))
+                            || _splitTerminal.accountingContextForTokenOf(_split.projectId, _token).decimals != _decimals
                     ) {
                         _splitAmount = 0;
                     } else {
@@ -536,10 +558,10 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                         _referralMetadata = bytes(abi.encodePacked(_gameId));
 
                         // Approve the `_amount` of tokens from the destination terminal to transfer tokens from this contract.
-                        if (_token != JBTokens.ETH) IERC20(_token).safeApprove(address(_splitTerminal), _splitAmount);
+                        if (_token != JBConstants.NATIVE_TOKEN) IERC20(_token).safeApprove(address(_splitTerminal), _splitAmount);
 
                         // If the token is ETH, send it in msg.value.
-                        uint256 _payableValue = _token == JBTokens.ETH ? _splitAmount : 0;
+                        uint256 _payableValue = _token == JBConstants.NATIVE_TOKEN ? _splitAmount : 0;
 
                         if (_split.preferAddToBalance) {
                             // Add to balance so tokens don't get issued.
@@ -550,7 +572,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                                 string.concat("Deposit from Defifa game #", _gameId.toString(), "."),
                                 _referralMetadata
                             ) {} catch (bytes memory) {
-                                if (_token != JBTokens.ETH) {
+                                if (_token != JBConstants.NATIVE_TOKEN) {
                                     IERC20(_token).safeDecreaseAllowance(address(_splitTerminal), _splitAmount);
                                 }
                                 _splitAmount = 0;
@@ -568,7 +590,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                                 string.concat("Payout from Defifa game #", _gameId.toString(), "."),
                                 _referralMetadata
                             ) {} catch (bytes memory) {
-                                if (_token != JBTokens.ETH) {
+                                if (_token != JBConstants.NATIVE_TOKEN) {
                                     IERC20(_token).safeDecreaseAllowance(address(_splitTerminal), _splitAmount);
                                 }
                                 _splitAmount = 0;
@@ -577,7 +599,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                     }
                 } else if (_split.beneficiary != address(0)) {
                     // Transfer the ETH.
-                    if (_token == JBTokens.ETH) {
+                    if (_token == JBConstants.NATIVE_TOKEN) {
                         Address.sendValue(
                             // Get a reference to the address receiving the tokens. If there's a beneficiary, send the funds directly to the beneficiary.
                             _split.beneficiary,
@@ -610,10 +632,10 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         if (_leftoverAmount != 0) {
             // Approve the `_amount` of tokens from the destination terminal to transfer tokens from this contract.
-            if (_token != JBTokens.ETH) IERC20(_token).safeApprove(address(_terminal), _leftoverAmount);
+            if (_token != JBConstants.NATIVE_TOKEN) IERC20(_token).safeApprove(address(_terminal), _leftoverAmount);
 
             // If the token is ETH, send it in msg.value.
-            uint256 _payableValue = _token == JBTokens.ETH ? _leftoverAmount : 0;
+            uint256 _payableValue = _token == JBConstants.NATIVE_TOKEN ? _leftoverAmount : 0;
 
             // Add leftover amount back into the game's pot.
             _terminal.addToBalanceOf{value: _payableValue}(
@@ -626,7 +648,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Get the game's current metadata.
-        (, JBFundingCycleMetadata memory _metadata) = controller.currentFundingCycleOf(_gameId);
+        (, JBRulesetMetadata memory _metadata) = controller.currentFundingCycleOf(_gameId);
 
         // Get a reference to the $DEFIFA token.
         IERC20 _defifaToken = IDefifaDelegate(_metadata.dataSource).defifaToken();
@@ -681,7 +703,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @param _dataSource The address of the Defifa data source.
     function _queueMintPhase(DefifaLaunchProjectData memory _launchProjectData, address _dataSource) internal {
         // Initialize the terminal array .
-        IJBPaymentTerminal[] memory _terminals = new IJBPaymentTerminal[](1);
+        IJBTerminal[] memory _terminals = new IJBTerminal[](1);
         _terminals[0] = _launchProjectData.terminal;
 
         // Launch the project with params for phase 1 of the game.
@@ -925,13 +947,13 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @param _gameId The ID of the game to check for no contest for.
     /// @param _currentFundingCycle The cycle to check for no contest against.
     /// @return A flag indicating if a game with the current funding cycle is in no contest.
-    function _noContestInevitable(uint256 _gameId, JBFundingCycle memory _currentFundingCycle)
+    function _noContestInevitable(uint256 _gameId, JBRuleset memory _currentFundingCycle)
         internal
         view
         returns (bool)
     {
         // Get the game's previously configured funding cycle.
-        (JBFundingCycle memory _previouslyConfiguredFundingCycle,) =
+        (JBRuleset memory _previouslyConfiguredFundingCycle,) =
             controller.getFundingCycleOf(_gameId, _currentFundingCycle.basedOn);
 
         // If a funding cycle has rolled over, it's in No Contest.
