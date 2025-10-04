@@ -394,7 +394,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
         
         // Launch the Juicebox project, and sanity check our gameId.
-        assert(gameId == _launchGame(_launchProjectData, address(_delegate)));
+        assert(gameId == _launchGame(_launchProjectData, gameId, address(_delegate)));
 
         // Clone and initialize the new governor.
         governor.initializeGame({
@@ -446,6 +446,88 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     //         return _queueGamePhase(_gameId, _metadata.dataSource);
     //     }
     // }
+
+
+    /// @notice Fulfill split amounts between all splits for a game.
+    /// @param _gameId The ID of the game to fulfill splits for.
+    function fulfillCommitmentsOf(uint256 _gameId) external virtual override {
+        // Make sure commitments haven't already been fulfilled.
+        if (fulfilledCommitmentsOf[_gameId] != 0) return;
+        // Set the fulfilled commitments to 1 to prevent re-entrance.
+        fulfilledCommitmentsOf[_gameId] = 1;
+
+        // Get the game's current funding cycle along with its metadata.
+        (, JBRulesetMetadata memory _metadata) =
+            controller.currentRulesetOf(_gameId);
+
+        // Make sure the game's commitments can be fulfilled.
+        if (!IDefifaDelegate(_metadata.dataHook).redemptionWeightIsSet()) {
+            revert CANT_FULFILL_YET();
+        }
+        
+        // Get the game token and the terminal.
+        address _token = _opsOf[_gameId].token;
+        IJBMultiTerminal _terminal = IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf(_gameId, _token)));
+
+        // Get the current pot.
+        uint256 _pot = _terminal.STORE().balanceOf(
+            address(_terminal), _gameId, _token
+        );
+        
+        // Send the payout to pay all the fees for this game.
+        _terminal.sendPayoutsOf({
+            projectId: _gameId,
+            token: _token,
+            amount: _pot,
+            // TODO: Is this the correct currency?
+            currency: uint32(uint160(_token)),
+            minTokensPaidOut: _pot
+        });
+
+        // Queue the final ruleset.
+        JBRulesetConfig[] memory rulesetConfigs = new JBRulesetConfig[](1);
+        rulesetConfigs[0] = JBRulesetConfig({
+            mustStartAtOrAfter: 0,
+            duration: 0, 
+            weight: 0,
+            weightCutPercent: 0,
+            approvalHook: IJBRulesetApprovalHook(address(0)),
+            metadata: JBRulesetMetadata({
+                reservedPercent: 0,
+                cashOutTaxRate: 0,
+                baseCurrency: _metadata.baseCurrency,
+                pausePay: true,
+                pauseCreditTransfers: false,
+                allowOwnerMinting: false,
+                allowSetCustomToken: false,
+                allowTerminalMigration: false,
+                allowSetTerminals: false,
+                allowSetController: false,
+                allowAddAccountingContext: false,
+                allowAddPriceFeed: false,
+                // Set this to true so only the deployer can fulfill the commitments.
+                ownerMustSendPayouts: true,
+                holdFees: false,
+                useTotalSurplusForCashOuts: false,
+                useDataHookForPay: true,
+                useDataHookForCashOut: true,
+                dataHook: _metadata.dataHook,
+                metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
+                    JB721TiersRulesetMetadata({
+                    pauseTransfers: false,
+                    pauseMintPendingReserves: false 
+                })
+                ))
+            }),
+            // No more payouts.
+            splitGroups: new JBSplitGroup[](0),
+            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0) 
+        });
+        
+        // Update the ruleset to the final one.
+        controller.queueRulesetsOf(_gameId, rulesetConfigs, 'Defifa game has finished.');
+    }
+
 
     /// @notice Fulfill split amounts between all splits for a game.
     /// @param _gameId The ID of the game to fulfill splits for.
@@ -701,7 +783,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // ------------------------ internal functions ----------------------- //
     //*********************************************************************//
 
-    function _launchGame(DefifaLaunchProjectData memory _launchProjectData, address _dataSource) internal returns (uint256 projectId) {
+    function _launchGame(DefifaLaunchProjectData memory _launchProjectData, uint256 _gameId, address _dataSource) internal returns (uint256 projectId) {
         // 
         JBAccountingContext[] memory accountingContexts = new JBAccountingContext[](1);
         accountingContexts[0] = _launchProjectData.token;
@@ -719,7 +801,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         
         // `MINT` cycle.
         rulesetConfigs[0] = JBRulesetConfig({
-            mustStartAtOrAfter: _launchProjectData.start,
+            mustStartAtOrAfter: _launchProjectData.start - _launchProjectData.mintPeriodDuration - _launchProjectData.refundPeriodDuration,
             duration: _launchProjectData.mintPeriodDuration, 
             weight: 0,
             weightCutPercent: 0,
@@ -759,7 +841,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         if (hasRefundPhase) {
             // `REFUND` cycle.
             rulesetConfigs[cycleNumber++] = JBRulesetConfig({
-                mustStartAtOrAfter: _launchProjectData.start + _launchProjectData.mintPeriodDuration,
+                mustStartAtOrAfter: _launchProjectData.start - _launchProjectData.refundPeriodDuration,
                 duration: _launchProjectData.refundPeriodDuration, 
                 weight: 0,
                 weightCutPercent: 0,
@@ -798,9 +880,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Set fund access constraints.
-        JBCurrencyAmount[] memory surplusAllowances = new JBCurrencyAmount[](1);
-        surplusAllowances[0] = JBCurrencyAmount({
-            // Allow a max overflow allowance so that this contract can pull funds to distribute to splits and for fees.
+        JBCurrencyAmount[] memory payoutAmounts = new JBCurrencyAmount[](1);
+        payoutAmounts[0] = JBCurrencyAmount({
+            // We allow a payout of the full amount, this will then mostly be added back to the balance of the project.
             amount: type(uint224).max,
             currency: _launchProjectData.token.currency
         });
@@ -809,13 +891,13 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         fundAccessConstraints[0] = JBFundAccessLimitGroup({
             terminal: address(_launchProjectData.terminal),
             token: _launchProjectData.token.token,
-            payoutLimits: new JBCurrencyAmount[](0),
-            surplusAllowances: surplusAllowances
+            payoutLimits: payoutAmounts,
+            surplusAllowances: new JBCurrencyAmount[](0)
         });
         
-        // `SCORING` & `COMPLETE` cycles.
+        // `SCORING` cycle.
         rulesetConfigs[cycleNumber++] = JBRulesetConfig({
-            mustStartAtOrAfter: _launchProjectData.start + _launchProjectData.mintPeriodDuration + _launchProjectData.refundPeriodDuration,
+            mustStartAtOrAfter: _launchProjectData.start,
             duration: 0, 
             weight: 0,
             weightCutPercent: 0,
@@ -833,7 +915,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 allowSetController: false,
                 allowAddAccountingContext: false,
                 allowAddPriceFeed: false,
-                ownerMustSendPayouts: false,
+                // Set this to true so only the deployer can fulfill the commitments.
+                ownerMustSendPayouts: true,
                 holdFees: false,
                 useTotalSurplusForCashOuts: false,
                 useDataHookForPay: true,
@@ -846,8 +929,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 })
                 ))
             }),
-            splitGroups: new JBSplitGroup[](0),
-            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0) 
+            splitGroups: _buildSplits(_gameId, _launchProjectData.token.token, _launchProjectData.splits),
+            fundAccessLimitGroups: fundAccessConstraints 
         });
 
         // launch the project.
@@ -858,6 +941,48 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             terminalConfigurations: terminalConfigs, 
             memo: 'Launching Defifa game.'
         });
+    }
+
+    function _buildSplits(uint256 _gameId, address _token, JBSplit[] memory _initialSplits) internal view returns (JBSplitGroup[] memory) {
+        uint256 _numberOfSplits = _initialSplits.length;
+        uint256 _totalPercent;
+
+        JBSplit[] memory _splits = new JBSplit[](_initialSplits.length + 2);
+        // Copy the splits over.
+        for (uint256 _i; _i < _numberOfSplits; _i++) {
+            // Copy the split over.
+            _splits[_i] = _initialSplits[_i];
+            // Track the total percentage.
+            _totalPercent += _initialSplits[_i].percent;
+        }
+
+        // Add a split for the fee.
+        _splits[_numberOfSplits] = JBSplit({
+            preferAddToBalance: false,
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / feeDivisor),
+            projectId: uint64(defifaProjectId),
+            beneficiary: payable(address(this)),
+            lockedUntil: 0,
+            hook: IJBSplitHook(address(0))
+        });
+
+        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / feeDivisor;
+        
+        // Add a split for the leftover percentage.
+        _splits[_numberOfSplits + 1] = JBSplit({
+            preferAddToBalance: true,
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT - _totalPercent),
+            projectId: uint64(_gameId),
+            beneficiary: payable(address(0)),
+            lockedUntil: 0,
+            hook: IJBSplitHook(address(0))
+        });
+        
+        // Build the grouped split for the payment of the game token.
+        JBSplitGroup[] memory _groupedSplits = new JBSplitGroup[](1);
+        _groupedSplits[0] = JBSplitGroup({groupId: uint256(uint160(_token)), splits: _splits});
+
+        return _groupedSplits;
     }
 
     /// @notice Launches a Defifa project with the minting phase configured.
