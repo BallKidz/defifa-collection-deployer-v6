@@ -6,6 +6,8 @@ import "@bananapus/721-hook-v5/src/JB721TiersHook.sol";
 import "@bananapus/721-hook-v5/src/abstract/JB721Hook.sol";
 import "@bananapus/721-hook-v5/src/libraries/JB721TiersRulesetMetadataResolver.sol";
 import "@bananapus/core-v5/src/libraries/JBRulesetMetadataResolver.sol";
+
+import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataResolver.sol";
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -263,7 +265,8 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
 
         // If no tiers were minted, nothing to redeem.
         if (_tier.initialSupply- _tier.remainingSupply == 0) return 0;
-
+        
+        // Calculate the amount of tokens that existed at the start of the last phase.
         uint256 _totalTokensForCashoutInTier = _tier.initialSupply - _tier.remainingSupply
             - (store.numberOfBurnedFor(address(this), _tierId ) - tokensRedeemedFrom[_tierId]);
 
@@ -332,23 +335,21 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
             JBCashOutHookSpecification[] memory hookSpecifications
         )
     {
-        // Make sure fungible project tokens aren't being redeemed too.
-        // TODO: Proper error.
-        if (context.cashOutCount > 0) revert();
+        // Make sure (fungible) project tokens aren't also being cashed out.
+        if (context.cashOutCount > 0) revert JB721Hook_UnexpectedTokenCashedOut();
 
-        // Check the 4 bytes interfaceId and handle the case where the metadata was not intended for this contract
-        // Skip 32 bytes reserved for generic extension parameters.
-        if (context.metadata.length < 36 || bytes4(context.metadata[32:36]) != type(IDefifaDelegate).interfaceId) {
-            // TODO: Proper error.
-            revert();
-        }
+        // Fetch the cash out hook metadata using the corresponding metadata ID.
+        (bool metadataExists, bytes memory metadata) =
+            JBMetadataResolver.getDataFor(JBMetadataResolver.getId("cashOut", codeOrigin), context.metadata);
 
-        // Set the only delegate allocation to be a callback to this contract.
+        // Use this contract as the only cash out hook.
         hookSpecifications = new JBCashOutHookSpecification[](1);
-        hookSpecifications[0] = JBCashOutHookSpecification(this, 0, bytes(''));
+        hookSpecifications[0] = JBCashOutHookSpecification(this, 0, bytes(""));
 
-        // Decode the metadata
-        (,, uint256[] memory _decodedTokenIds) = abi.decode(context.metadata, (bytes32, bytes4, uint256[]));
+        uint256[] memory decodedTokenIds;
+
+        // Decode the metadata.
+        if (metadataExists) decodedTokenIds = abi.decode(metadata, (uint256[]));
 
         // Get the current gae phase.
         DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(context.projectId);
@@ -359,29 +360,26 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
                 || _gamePhase == DefifaGamePhase.NO_CONTEST || _gamePhase == DefifaGamePhase.NO_CONTEST_INEVITABLE
         ) {
             // Keep a reference to the number of tokens.
-            uint256 _numberOfTokenIds = _decodedTokenIds.length;
+            uint256 _numberOfTokenIds = decodedTokenIds.length;
 
             for (uint256 _i; _i < _numberOfTokenIds;) {
                 unchecked {
-                    cashOutCount += store.tierOfTokenId(address(this), _decodedTokenIds[_i], false).price;
+                    cashOutCount += store.tierOfTokenId(address(this), decodedTokenIds[_i], false).price;
                     _i++;
                 }
             }
-            
-            // TODO: Check if this is correct.
-            return (context.cashOutTaxRate, cashOutCount, context.surplus.value, hookSpecifications);
+        } else {
+            // If the game is in its scoring or complete phase, reclaim amount is based on the tier weights.
+            cashOutCount = mulDiv(
+                context.surplus.value + amountRedeemed, cashOutWeightOf(decodedTokenIds, context), TOTAL_REDEMPTION_WEIGHT
+            );
         }
+        
+        // Use the surplus as the total supply.
+        totalSupply = context.surplus.value;
 
-        // Return the weighted amount.
-        return (
-            context.cashOutTaxRate,
-            // TODO: Check if this is correct after changing from v3 -> v5
-            mulDiv(
-                context.surplus.value + amountRedeemed, cashOutWeightOf(_decodedTokenIds, context), TOTAL_REDEMPTION_WEIGHT
-            ),
-            context.surplus.value,
-            hookSpecifications 
-        );
+        // Use the cash out tax rate from the context.
+        cashOutTaxRate = context.cashOutTaxRate;
     }
 
     /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens claimable for a set of token IDs.
@@ -668,25 +666,27 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
         // TODO:Check if we need to make any changes here as we are overriding the new JB721Hook instead.
         override(IJBCashOutHook, JB721Hook)
     {
-        // Make sure the caller is a terminal of the project, and the call is being made on behalf of an interaction with the correct project.
-        // TODO: Proper error.
+        // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
+        // interaction with the correct project.
         if (
             msg.value != 0 || !DIRECTORY.isTerminalOf(PROJECT_ID, IJBTerminal(msg.sender))
                 || context.projectId != PROJECT_ID 
-        ) revert();
-
+        ) revert JB721Hook_InvalidCashOut();
+        
         // If there's nothing being claimed, revert to prevent burning for nothing.
         if (context.reclaimedAmount.value == 0) revert NOTHING_TO_CLAIM();
 
-        // Check the 4 bytes interfaceId and handle the case where the metadata was not intended for this contract
-        // Skip 32 bytes reserved for generic extension parameters.
-        if (context.cashOutMetadata.length < 36 || bytes4(context.cashOutMetadata[32:36]) != type(IDefifaDelegate).interfaceId) {
-            // TODO: Proper error.
+        // Fetch the cash out hook metadata using the corresponding metadata ID.
+        (bool metadataExists, bytes memory metadata) = JBMetadataResolver.getDataFor(
+            JBMetadataResolver.getId("cashOut", METADATA_ID_TARGET), context.cashOutMetadata
+        );
+
+        if (!metadataExists) {
             revert();
         }
 
         // Decode the metadata.
-        (,, uint256[] memory _decodedTokenIds) = abi.decode(context.cashOutMetadata, (bytes32, bytes4, uint256[]));
+        (uint256[] memory _decodedTokenIds) = abi.decode(metadata, (uint256[]));
 
         // Get a reference to the number of token IDs being checked.
         uint256 _numberOfTokenIds = _decodedTokenIds.length;
@@ -803,18 +803,17 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
         // Make sure the game is being played in the correct currency.
         if (context.amount.currency != pricingCurrency) revert WRONG_CURRENCY();
 
-        // Keep a reference to the address that should be given attestations from this mint.
-        address _attestationDelegate;
+        // Resolve the metadata.
+        (bool found, bytes memory metadata) =
+            JBMetadataResolver.getDataFor(JBMetadataResolver.getId("pay", codeOrigin), context.payerMetadata);
 
-        // Skip the first 32 bytes which are used by the JB protocol to pass the paying project's ID when paying from a JBSplit.
-        // Check the 4 bytes interfaceId to verify the metadata is intended for this contract.
-        if (context.payerMetadata.length > 68 && bytes4(context.payerMetadata[64:68]) == type(IDefifaDelegate).interfaceId) {
-            // Keep a reference to the the specific tier IDs to mint.
-            uint16[] memory _tierIdsToMint;
+        if (!found) {
+           // TODO: Revert? 
+           return;
+        }
 
-            // Decode the metadata.
-            (,,, _attestationDelegate, _tierIdsToMint) =
-                abi.decode(context.payerMetadata, (bytes32, bytes32, bytes4, address, uint16[]));
+        // Decode the metadata.
+        (address _attestationDelegate, uint16[] memory _tierIdsToMint ) = abi.decode(metadata, (address, uint16[]));
 
             // Set the payer as the attestation delegate by default.
             if (_attestationDelegate == address(0)) {
@@ -882,7 +881,6 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
 
             // Make sure the buyer isn't overspending.
             if (_leftoverAmount != 0) revert OVERSPENDING();
-        }
     }
 
     /// @notice Gets the amount of attestation units an address has for a particular tier.

@@ -9,6 +9,8 @@ import "../DefifaDeployer.sol";
 import "../DefifaTokenUriResolver.sol";
 import "@bananapus/721-hook-v5/src/JB721TiersHookStore.sol";
 
+import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataResolver.sol";
+import {MetadataResolverHelper} from "@bananapus/core-v5/test/helpers/MetadataResolverHelper.sol";
 import "@bananapus/core-v5/test/helpers/TestBaseWorkflow.sol";
 import {JBTest} from "@bananapus/core-v5/test/helpers/JBTest.sol";
 import "@bananapus/core-v5/src/libraries/JBRulesetMetadataResolver.sol";
@@ -29,6 +31,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     uint256 _gameId = 3;
 
     DefifaDeployer deployer;
+    DefifaDelegate delegate;
     DefifaGovernor governor;
 
     address projectOwner = address(bytes20(keccak256("projectOwner")));
@@ -92,12 +95,12 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.prank(projectOwner);
         _defifaProjectTokenAccount = address(jbController().deployERC20For(_defifaProjectId, "Defifa", "DEFIFA", bytes32(0)));
 
-        DefifaDelegate _delegate = new DefifaDelegate(jbDirectory(), IERC20(address(_defifaProjectTokenAccount)), IERC20(_protocolFeeProjectTokenAccount));
+        delegate = new DefifaDelegate(jbDirectory(), IERC20(address(_defifaProjectTokenAccount)), IERC20(_protocolFeeProjectTokenAccount));
         governor = new DefifaGovernor(jbController(), blockSeconds);
         JBAddressRegistry _registry = new JBAddressRegistry();
         DefifaTokenUriResolver _tokenURIResolver = new DefifaTokenUriResolver(ITypeface(address(0)));
         deployer = new DefifaDeployer(
-            address(_delegate),
+            address(delegate),
             _tokenURIResolver,
             governor,
             jbController(),
@@ -107,7 +110,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         );
 
         // Transfer ownership of the delegate to the deployer.
-        _delegate.transferOwnership(address(deployer));
+        delegate.transferOwnership(address(deployer));
         // Transfer ownership of the governor to the deployer.
         governor.transferOwnership(address(deployer));
     }
@@ -131,11 +134,10 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         vm.assume(tier != 0);
         rawMetadata[0] = uint16(tier); // reward tier
-        bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _user, rawMetadata);
+
         // Pay to the project and mint an NFT
         vm.prank(_user);
-        jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _user, 0, "", metadata);
+        jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _user, 0, "", _buildPayMetadata(abi.encode(_user, rawMetadata)));
 
         // The user should now have a balance
         assertEq(_nft.balanceOf(_user), 1);
@@ -199,7 +201,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //     {
     //       uint256[] memory redemptionId = new uint256[](1);
     //       redemptionId[0] = _generateTokenId(i + 1, 1);
-    //       redemptionMetadata = abi.encode(bytes32(0), type(IDefifaDelegate).interfaceId, redemptionId);
+    //       redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId);
     //     }
     //     vm.expectRevert(abi.encodeWithSignature('FUNDING_CYCLE_REDEEM_PAUSED()'));
     //     vm.prank(_user);
@@ -227,7 +229,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //     {
     //       uint256[] memory redemptionId = new uint256[](1);
     //       redemptionId[0] = _generateTokenId(i + 1, 1);
-    //       redemptionMetadata = abi.encode(bytes32(0), type(IDefifaDelegate).interfaceId, redemptionId);
+    //       redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId);
     //     }
     //     // Here the refunds are not allowed but redemptions are,
     //     // so it should instead revert with an error showing that there is no redemption set for our tier
@@ -269,7 +271,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+            _buildPayMetadata(abi.encode(_users[i], rawMetadata));
         // Pay to the project and mint an NFT
         vm.expectRevert(JBTerminalStore.JBTerminalStore_RulesetPaymentPaused.selector);
         vm.prank(_users[i]);
@@ -284,7 +286,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+            _buildPayMetadata(abi.encode(_users[i], rawMetadata));
         // Pay to the project and mint an NFT
         vm.expectRevert(JBTerminalStore.JBTerminalStore_RulesetPaymentPaused.selector);
         vm.prank(_users[i]);
@@ -366,7 +368,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+            _buildPayMetadata(abi.encode(_users[i], rawMetadata));
         // Pay to the project and mint an NFT
         vm.prank(_users[i]);
         jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0, "", metadata);
@@ -438,7 +440,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+            _buildPayMetadata(abi.encode(_users[i], rawMetadata));
         // Pay to the project and mint an NFT
         vm.prank(_users[i]);
         jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0, "", metadata);
@@ -505,7 +507,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             {
                 uint256[] memory redemptionId = new uint256[](1);
                 redemptionId[0] = _generateTokenId(i + 1, 1);
-                redemptionMetadata = abi.encode(bytes32(0), type(IDefifaDelegate).interfaceId, redemptionId);
+                redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId));
             }
             // If the redemption is 0 this will revert
             if (scorecards[i].redemptionWeight == 0) {
@@ -560,7 +562,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _refundUser, rawMetadata);
+            _buildPayMetadata(abi.encode(_refundUser, rawMetadata));
         // Pay to the project and mint an NFT
         vm.deal(_refundUser, _cost);
 
@@ -582,7 +584,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         {
             uint256[] memory redemptionId = new uint256[](1);
             redemptionId[0] = _generateTokenId(1, _tier.initialSupply - _tier.remainingSupply + 1 + _numberBurned);
-            redemptionMetadata = abi.encode(bytes32(0), type(IDefifaDelegate).interfaceId, redemptionId);
+            redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId));
         }
 
         vm.prank(_refundUser);
@@ -630,7 +632,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             uint16[] memory rawMetadata = new uint16[](1);
             rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
             bytes memory metadata =
-                abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+                _buildPayMetadata(abi.encode(_users[i], rawMetadata));
             // Pay to the project and mint an NFT
             vm.prank(_users[i]);
             jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether,_users[i], 0, "", metadata);
@@ -642,7 +644,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             uint16[] memory rawMetadata = new uint16[](1);
             rawMetadata[0] = uint16(nOfOtherTiers + 1); // reward tier, 1 indexed
             bytes memory metadata =
-                abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+                _buildPayMetadata(abi.encode(_users[i], rawMetadata));
             // Pay to the project and mint an NFT
             vm.prank(_users[i]);
             jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0, "", metadata);
@@ -690,7 +692,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             uint16[] memory rawMetadata = new uint16[](1);
             rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
             bytes memory metadata =
-                abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+                _buildPayMetadata(abi.encode(_users[i], rawMetadata));
             // Pay to the project and mint an NFT
             vm.prank(_users[i]);
             jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0,  "", metadata);
@@ -702,7 +704,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             uint16[] memory rawMetadata = new uint16[](1);
             rawMetadata[0] = uint16(nOfOtherTiers + 1); // reward tier, 1 indexed
             bytes memory metadata =
-                abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+                _buildPayMetadata(abi.encode(_users[i], rawMetadata));
             // Pay to the project and mint an NFT
             vm.prank(_users[i]);
             jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0,  "", metadata);
@@ -781,7 +783,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             {
                 uint256[] memory redemptionId = new uint256[](1);
                 redemptionId[0] = _generateTokenId(_tier, _tier == nOfOtherTiers + 1 ? i - nOfOtherTiers + 1 : 1);
-                redemptionMetadata = abi.encode(bytes32(0), type(IDefifaDelegate).interfaceId, redemptionId);
+                redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId));
             }
             uint256 _expectedTierRedemption;
             {
@@ -933,7 +935,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //     uint16[] memory rawMetadata = new uint16[](1);
     //     rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
     //     bytes memory metadata =
-    //         abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+    //         _buildPayMetadata(abi.encode(_users[i], rawMetadata);
     //     // Pay to the project and mint an NFT
     //     vm.prank(_users[i]);
     //     jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether,_users[i], 0, "", metadata);
@@ -974,7 +976,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+            _buildPayMetadata(abi.encode(_users[i], rawMetadata));
         // Pay to the project and mint an NFT
         vm.prank(_users[i]);
         jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0, "", metadata);
@@ -1042,7 +1044,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
+            _buildPayMetadata(abi.encode(_users[i], rawMetadata));
         // Pay to the project and mint an NFT
         vm.prank(_users[i]);
         jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0, "", metadata);
@@ -1164,7 +1166,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(_tierId); // reward tier, 1 indexed
         bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _refundUser, rawMetadata);
+            _buildPayMetadata(abi.encode(_refundUser, rawMetadata));
         // Pay to the project and mint an NFT
         vm.deal(_refundUser, _cost);
         vm.prank(_refundUser);
@@ -1180,7 +1182,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             uint256[] memory redemptionId = new uint256[](1);
             redemptionId[0] =
                 _generateTokenId(_tierId, _tier.initialSupply - --_tier.remainingSupply);
-            redemptionMetadata = abi.encode(bytes32(0), type(IDefifaDelegate).interfaceId, redemptionId);
+            redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId));
         }
         vm.prank(_refundUser);
         JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
@@ -1220,5 +1222,31 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
     function _generateTokenId(uint256 _tierId, uint256 _tokenNumber) internal pure returns (uint256) {
         return (_tierId * 1_000_000_000) + _tokenNumber;
+    }
+
+    function _buildPayMetadata(bytes memory metadata) internal returns(bytes memory) {
+       // Build the metadata using the tiers to mint and the overspending flag.
+        bytes[] memory data = new bytes[](1);
+        data[0] = metadata;
+
+        // Pass the hook ID.
+        bytes4[] memory ids = new bytes4[](1);
+        ids[0] = metadataHelper().getId("pay", address(delegate));
+
+        // Generate the metadata.
+        return metadataHelper().createMetadata(ids, data); 
+    }
+
+    function _buildCashOutMetadata(bytes memory metadata) internal returns(bytes memory) {
+       // Build the metadata using the tiers to mint and the overspending flag.
+        bytes[] memory data = new bytes[](1);
+        data[0] = metadata;
+
+        // Pass the hook ID.
+        bytes4[] memory ids = new bytes4[](1);
+        ids[0] = metadataHelper().getId("cashOut", address(delegate));
+
+        // Generate the metadata.
+        return metadataHelper().createMetadata(ids, data); 
     }
 }
