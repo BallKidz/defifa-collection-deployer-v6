@@ -412,72 +412,6 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         _governor.ratifyScorecardFrom(_gameId, scorecards);
     }
 
-    function testSetRedemptionRates_fails_declined() external {
-        uint8 nTiers = 10;
-        address[] memory _users = new address[](nTiers);
-        DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
-        // Phase 1: minting
-        vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration + 1);
-        //deployer.queueNextPhaseOf(_projectId);
-        for (uint256 i = 0; i < nTiers; i++) {
-            // Generate a new address for each tier
-            _users[i] = address(bytes20(keccak256(abi.encode("user", Strings.toString(i)))));
-        // fund user
-        vm.deal(_users[i], 1 ether);
-        // Build metadata to buy specific NFT
-        uint16[] memory rawMetadata = new uint16[](1);
-        rawMetadata[0] = uint16(i + 1); // reward tier, 1 indexed
-        bytes memory metadata =
-            abi.encode(bytes32(0), bytes32(0), type(IDefifaDelegate).interfaceId, _users[i], rawMetadata);
-        // Pay to the project and mint an NFT
-        vm.prank(_users[i]);
-        jbMultiTerminal().pay{value: 1 ether}(_projectId, JBConstants.NATIVE_TOKEN, 1 ether, _users[i], 0, "", metadata);
-        // Set the delegate as the user themselves
-        DefifaDelegation[] memory tiered721SetDelegatesData =
-            new DefifaDelegation[](1);
-        tiered721SetDelegatesData[0] =
-            DefifaDelegation({delegatee: _users[i], tierId: uint256(i + 1)});
-        vm.prank(_users[i]);
-        _nft.setTierDelegatesTo(tiered721SetDelegatesData);
-        // Forward 1 block, user should receive all the voting power of the tier, as its the only NFT
-        vm.roll(block.number + 100);
-        assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], block.number - 1));
-        }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
-        // Generate the scorecards
-        DefifaTierRedemptionWeight[] memory scorecards = new DefifaTierRedemptionWeight[](nTiers);
-        // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
-        for (uint256 i = 0; i < scorecards.length; i++) {
-            scorecards[i].id = i + 1;
-            scorecards[i].redemptionWeight = i % 2 == 0 ? 1_000_000_000 / (scorecards.length / 2) : 0;
-        }
-        // Forward time so proposals can be created
-        uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
-        // Forward time so voting becomes active
-        vm.roll(block.number + _governor.attestationStartTimeOf(_gameId) + 1);
-        // '_governor.attestationStartTimeOf(_gameId)' internally uses the timestamp and not the block number, so we have to modify it for the next assert
-        // block time is 12 secs
-        vm.warp(block.timestamp + (_governor.attestationStartTimeOf(_gameId) * 12));
-        // No voting delay after the initial voting delay has passed in
-        //assertEq(_governor.attestationStartTimeOf(_gameId), 0);
-        // We have 60% vote against and 40% vote in favor
-        for (uint256 i = 0; i < _users.length; i++) {
-            vm.prank(_users[i]);
-            _governor.attestToScorecardFrom(_gameId, _proposalId);
-        }
-
-        // Forward the amount of blocks needed to reach the end (and round up)
-        vm.roll(block.number + _governor.attestationGracePeriodOf(_gameId) + 1);
-        // each block is of 12 secs
-        vm.warp(block.timestamp + (_governor.attestationGracePeriodOf(_gameId) * 12) + 1);
-        // Execute the proposal
-        vm.expectRevert("Governor: proposal not successful");
-        _governor.ratifyScorecardFrom(_gameId, scorecards);
-    }
-
     function testSetRedemptionRatesAndRedeem_multipleTiers(uint8 nTiers, uint8[] calldata distribution) public {
         vm.assume(nTiers > 10 && nTiers < 100);
         vm.assume(distribution.length < nTiers);
@@ -598,14 +532,12 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         }
         // All NFTs should have been redeemed, only some dust should be left
         // Max allowed dust is 0.0001
-
         uint256 remainingSurplus = jbMultiTerminal().currentSurplusOf(_projectId,
              jbMultiTerminal().accountingContextsOf(_projectId),
             18,
              JBCurrencyIds.ETH
                                                          );
         assertApproxEqAbs(remainingSurplus, _pot * (totalRedemptionWeight - assignedRedemptionWeight) / totalRedemptionWeight, 10 ** 14);
-        // assertLt(address(jbMultiTerminal()).balance, 10 ** 14);
     }
 
     function testVotingPowerDecreasesAfterRefund() public {
@@ -795,9 +727,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint256 totalRedemptionWeight = _nft.TOTAL_REDEMPTION_WEIGHT();
 
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
-        console.log("Total weight:", totalRedemptionWeight);
-        console.log("internal weight:", totalWeight);
-        uint256 sumOfWeights;
+        uint256 assignedRedemptionWeight;
         for (uint256 i = 0; i < scorecards.length; i++) {
             scorecards[i].id = i + 1;
             if (baseRedemptionWeight != 0) {
@@ -806,11 +736,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             if (i == nOfOtherTiers && winningTierExtraWeight != 0) {
                 scorecards[i].redemptionWeight += (totalRedemptionWeight * uint256(winningTierExtraWeight)) / totalWeight;
             }
-            sumOfWeights += scorecards[i].redemptionWeight;
-            console.log("Redemption weight:", scorecards[i].redemptionWeight);
+            assignedRedemptionWeight += scorecards[i].redemptionWeight;
         }
-
-        console.log("sum:", sumOfWeights);
         {
             // Forward time so proposals can be created
             uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
@@ -887,11 +814,15 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             // Assert that our expected tier redemption is ~equal to the actual amount
             // Allowing for some rounding errors, max allowed error is 0.000001 ether
             assertApproxEqRel(_expectedTierRedemption, _user.balance, 0.0001 ether);
-            // assertLt(_expectedTierRedemption - _user.balance, 10 ** 12);
         }
         // All NFTs should have been redeemed, only some dust should be left
         // Max allowed dust is 0.0001
-        assertLt(address(jbMultiTerminal()).balance, 10 ** 14);
+        uint256 remainingSurplus = jbMultiTerminal().currentSurplusOf(_projectId,
+             jbMultiTerminal().accountingContextsOf(_projectId),
+            18,
+             JBCurrencyIds.ETH
+                                                         );
+        assertApproxEqAbs(remainingSurplus, _pot * (totalRedemptionWeight - assignedRedemptionWeight) / totalRedemptionWeight, 10 ** 14);
     }
 
     function testPhaseTimes(

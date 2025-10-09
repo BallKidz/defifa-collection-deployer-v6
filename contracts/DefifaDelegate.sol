@@ -265,7 +265,7 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
         if (_tier.initialSupply- _tier.remainingSupply == 0) return 0;
 
         uint256 _totalTokensForCashoutInTier = _tier.initialSupply - _tier.remainingSupply
-            - (store.numberOfBurnedFor(address(this), _tierId ) + tokensRedeemedFrom[_tierId]);
+            - (store.numberOfBurnedFor(address(this), _tierId ) - tokensRedeemedFrom[_tierId]);
 
         // Calculate the percentage of the tier redemption amount a single token counts for.
         return _weight / _totalTokensForCashoutInTier;
