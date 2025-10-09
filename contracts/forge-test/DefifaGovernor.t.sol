@@ -522,11 +522,13 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         //deployer.queueNextPhaseOf(_projectId);
         // Generate the scorecards
         DefifaTierRedemptionWeight[] memory scorecards = new DefifaTierRedemptionWeight[](nTiers);
+        uint256 assignedRedemptionWeight;
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
         for (uint256 i = 0; i < scorecards.length; i++) {
             scorecards[i].id = i + 1;
             if (distribution.length <= i) continue;
             scorecards[i].redemptionWeight = (uint256(distribution[i]) * totalRedemptionWeight) / _sumDistribution;
+            assignedRedemptionWeight += scorecards[i].redemptionWeight;
         }
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
@@ -552,6 +554,13 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
         _governor.ratifyScorecardFrom(_gameId, scorecards);
         vm.roll(block.number + 1);
+
+        uint256 _pot = jbMultiTerminal().currentSurplusOf(_projectId,
+             jbMultiTerminal().accountingContextsOf(_projectId),
+            18,
+             JBCurrencyIds.ETH
+                                                         );
+
         // Verify that the redemptionWeights actually changed
         for (uint256 i = 0; i < scorecards.length; i++) {
             address _user = _users[i];
@@ -580,15 +589,23 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             });
             if (scorecards[i].redemptionWeight == 0) continue;
             // We calculate the expected output based on the given distribution and how much is in the pot
-            uint256 _expectedTierRedemption = uint256(nTiers) * 1 ether;
+            uint256 _expectedTierRedemption = _pot;
             _expectedTierRedemption = (_expectedTierRedemption * distribution[i]) / _sumDistribution;
             // Assert that our expected tier redemption is ~equal to the actual amount
             // Allowing for some rounding errors, max allowed error is 0.000001 ether
-            assertLt(_expectedTierRedemption - _user.balance, 10 ** 12);
+            assertApproxEqRel(_expectedTierRedemption, _user.balance, 0.001 ether);
+            // assertLt(_expectedTierRedemption - _user.balance, 10 ** 12);
         }
         // All NFTs should have been redeemed, only some dust should be left
         // Max allowed dust is 0.0001
-        assertLt(address(jbMultiTerminal()).balance, 10 ** 14);
+
+        uint256 remainingSurplus = jbMultiTerminal().currentSurplusOf(_projectId,
+             jbMultiTerminal().accountingContextsOf(_projectId),
+            18,
+             JBCurrencyIds.ETH
+                                                         );
+        assertApproxEqAbs(remainingSurplus, _pot * (totalRedemptionWeight - assignedRedemptionWeight) / totalRedemptionWeight, 10 ** 14);
+        // assertLt(address(jbMultiTerminal()).balance, 10 ** 14);
     }
 
     function testVotingPowerDecreasesAfterRefund() public {

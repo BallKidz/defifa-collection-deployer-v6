@@ -379,7 +379,7 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
             mulDiv(
                 context.surplus.value + amountRedeemed, cashOutWeightOf(_decodedTokenIds, context), TOTAL_REDEMPTION_WEIGHT
             ),
-            context.surplus.value + amountRedeemed,
+            context.surplus.value,
             hookSpecifications 
         );
     }
