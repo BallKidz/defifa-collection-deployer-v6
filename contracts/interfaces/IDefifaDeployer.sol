@@ -54,7 +54,9 @@ interface IDefifaDeployer {
 
     function registry() external view returns (IJBAddressRegistry);
 
-    function feeDivisor() external view returns (uint256);
+    function defifaFeeDivisor() external view returns (uint256);
+
+    function baseProtocolFeeDivisor() external view returns (uint256);
 
     function timesFor(uint256 _gameId) external view returns (uint48, uint24, uint24);
 

@@ -44,7 +44,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         _tokens[0] = JBAccountingContext({
             token: JBConstants.NATIVE_TOKEN,
             decimals: 18,
-            currency: uint32(uint160(JBConstants.NATIVE_TOKEN))
+            currency: JBCurrencyIds.ETH
         });
 
         JBTerminalConfig[] memory terminalConfigs = new JBTerminalConfig[](1);
@@ -57,7 +57,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         rulesetConfigs[0] = JBRulesetConfig({
             mustStartAtOrAfter: 0, 
             duration: 10 days, 
-            weight: 0,
+            weight: 1e18,
             weightCutPercent: 0,
             approvalHook: IJBRulesetApprovalHook(address(0)),
             metadata: JBRulesetMetadata({
@@ -509,6 +509,9 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
                 redemptionId[0] = _generateTokenId(i + 1, 1);
                 redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId));
             }
+            uint256 _nanaBalance = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user);
+            uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
+
             // If the redemption is 0 this will revert
             if (scorecards[i].redemptionWeight == 0) {
                 vm.expectRevert(abi.encodeWithSignature("NOTHING_TO_CLAIM()"));
@@ -524,6 +527,11 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
                 metadata: redemptionMetadata
             });
             if (scorecards[i].redemptionWeight == 0) continue;
+
+            // Assert that the user received some of the fee tokens.
+            assertGt(IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user), _nanaBalance);
+            assertGt(IERC20(_defifaProjectTokenAccount).balanceOf(_user), _defifaBalance);
+
             // We calculate the expected output based on the given distribution and how much is in the pot
             uint256 _expectedTierRedemption = _pot;
             _expectedTierRedemption = (_expectedTierRedemption * distribution[i]) / _sumDistribution;
