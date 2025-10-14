@@ -72,9 +72,6 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
     /// _tierId The ID of the tier being checked.
     mapping(uint256 => Checkpoints.Trace224) internal _totalTierCheckpoints;
 
-    /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens this game was allocated from paying the network fee, packed into a uint256.
-    uint256 internal _packedTokenAllocation;
-
     /// @notice The first owner of each token ID, stored on first transfer out.
     /// _tokenId The ID of the token to get the stored first owner of.
     mapping(uint256 => address) internal _firstOwnerOf;
@@ -299,21 +296,8 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
         view
         returns (uint256 defifaTokenAllocation, uint256 baseProtocolTokenAllocation)
     {
-        // Get a reference to the pakced token allocation.
-        uint256 _packed = _packedTokenAllocation;
-
-        // defifa token allocation in bits 0-127 (128 bits).
-        uint256 _defifaTokenAllocation = uint256(uint128(_packed));
-
-        // base protocol token allocation in bits 128-255 (128 bits).
-        uint256 _baseProtocolTokenAllocation = uint256(uint128(_packed >> 128));
-
-        // Return the values.
-        defifaTokenAllocation =
-            (_defifaTokenAllocation != 0) ? _defifaTokenAllocation : defifaToken.balanceOf(address(this));
-        baseProtocolTokenAllocation = (_baseProtocolTokenAllocation != 0)
-            ? _baseProtocolTokenAllocation
-            : baseProtocolToken.balanceOf(address(this));
+        defifaTokenAllocation = defifaToken.balanceOf(address(this));
+        baseProtocolTokenAllocation = baseProtocolToken.balanceOf(address(this));
     }
 
     /// @notice The data calculated before a cash out is recorded in the terminal store. This data is provided to the
@@ -396,43 +380,33 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
         view
         returns (uint256 defifaTokenAmount, uint256 baseProtocolTokenAmount)
     {
+        // Keep track of whether the redemption is happening during the complete phase.
+        bool _isComplete = gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) == DefifaGamePhase.COMPLETE;
+        
+        // If the game isn't complete, we do not have any tokens to claim.
+        if (!_isComplete) return (0, 0);
+
+        // Keep a reference to the number of tokens being used for claims.
+        uint256 _numberOfTokens = _tokenIds.length;
+
+        // Calculate the amount paid to mint the tokens that are being burned. 
+        uint256 _cumulativeMintPrice;
+        for (uint256 _i; _i < _numberOfTokens; _i++) {
+            _cumulativeMintPrice += store.tierOfTokenId(address(this), _tokenIds[_i], false).price;
+        }
+
         // Set the amount of total $DEFIFA and $BASE_PROTOCOL token allocation if it hasn't been set yet.
         (uint256 _defifaTokenAllocation, uint256 _baseProtocolTokenAllocation) = tokenAllocations();
-
-        // If there's no $DEFIFA in this contract, return 0.
-        if (_defifaTokenAllocation == 0 && _baseProtocolTokenAllocation == 0) return (0, 0);
-
-        // Get a reference to the game's current pot, including any fulfilled commitments.
-        (uint256 _pot,,) = gamePotReporter.currentGamePotOf(PROJECT_ID, true);
-
-        // If there's no usable pot left, the rest of the $DEFIFA and $BASE_PROTOCOL is available.
-        if (_pot - gamePotReporter.fulfilledCommitmentsOf(PROJECT_ID) == 0) {
-            defifaTokenAmount = defifaToken.balanceOf(address(this));
-            baseProtocolTokenAmount = baseProtocolToken.balanceOf(address(this));
-        } else {
-            // Keep a reference to the number of tokens being used for claims.
-            uint256 _numberOfTokens = _tokenIds.length;
-
-            // Keep a reference to the tier being iterated on.
-            JB721Tier memory _tier;
-
-            // Keep a reference to the cumulative price of the tokens.
-            uint256 _cumulativePrice;
-
-            // Add up the prices of the tokens.
-            for (uint256 _i; _i < _numberOfTokens;) {
-                _tier = store.tierOfTokenId(address(this), _tokenIds[_i], false);
-                _cumulativePrice += _tier.price;
-                unchecked {
-                    ++_i;
-                }
-            }
-
-            // The amount of $DEFIFA and $BASE_PROTOCOL to send is the same proportion as the amount being redeemed to the total pot before any amount redeemed.
-            defifaTokenAmount = mulDiv(_defifaTokenAllocation, _cumulativePrice, _pot + amountRedeemed);
-            baseProtocolTokenAmount =
-                mulDiv(_baseProtocolTokenAllocation, _cumulativePrice, _pot + amountRedeemed);
+        
+        // If the total mint cost is 0, no tokens can be claimed.
+        uint256 __totalMintCost = _totalMintCost;
+        if (__totalMintCost == 0) {
+            return (0, 0);
         }
+
+        // Calculate the user's claimable amount.
+        defifaTokenAmount = _defifaTokenAllocation * _cumulativeMintPrice / _totalMintCost;
+        baseProtocolTokenAmount = _baseProtocolTokenAllocation * _cumulativeMintPrice / _totalMintCost;
     }
 
     /// @notice Indicates if this contract adheres to the specified interface.
@@ -1041,33 +1015,10 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
         // If there is an amount we should send, send it.
         if (defifaAmount != 0)  defifaToken.transfer(_beneficiary, defifaAmount);
         if (baseProtocolAmount != 0) baseProtocolToken.transfer(_beneficiary, baseProtocolAmount);
+
+        emit ClaimedTokens(_beneficiary, defifaAmount, baseProtocolAmount, msg.sender);
         
         return (defifaAmount != 0 || baseProtocolAmount != 0);
-    }
-
-    /// @notice Claim $DEFIFA and $BASE_PROTOCOL tokens to an account for a certain redeemed amount.
-    /// @param _beneficiary The beneficiary of the $DEFIFA tokens.
-    /// @param _tokenIds The IDs of the tokens being redeemed that are justifying a $DEFIFA claim.
-    function _claimTokensFor(address _beneficiary, uint256[] memory _tokenIds) internal {
-        // Set the amount of total $DEFIFA token allocation if it hasn't been set yet.
-        if (_packedTokenAllocation == 0) {
-            uint256 _packed;
-            // defifa token allocation in bits 0-127 (128 bits).
-            _packed |= defifaToken.balanceOf(address(this));
-            // base protocol token allocation in bits 128-255 (48 bits).
-            _packed |= uint256(uint128(baseProtocolToken.balanceOf(address(this)))) << 128;
-            // Store the packed values.
-            _packedTokenAllocation = _packed;
-        }
-
-        // Get a reference to the amounts to send.
-        (uint256 _defifaTokenAmount, uint256 _baseProtocolTokenAmount) = tokensClaimableFor(_tokenIds);
-
-        // Send the tokens.
-        defifaToken.transfer(_beneficiary, _defifaTokenAmount);
-        baseProtocolToken.transfer(_beneficiary, _baseProtocolTokenAmount);
-
-        emit ClaimedTokens(_beneficiary, _defifaTokenAmount, _baseProtocolTokenAmount, msg.sender);
     }
 
     /// @notice Before transferring an NFT, register its first owner (if necessary).

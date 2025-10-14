@@ -507,13 +507,18 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             assertEq(_nft.tierRedemptionWeights()[i], scorecards[i].redemptionWeight);
             // Craft the metadata: redeem the tokenId
             bytes memory redemptionMetadata;
+            uint256 _receiveNana;
+            uint256 _receiveDefifa;
             {
                 uint256[] memory redemptionId = new uint256[](1);
                 redemptionId[0] = _generateTokenId(i + 1, 1);
                 redemptionMetadata = _buildCashOutMetadata(abi.encode(redemptionId));
+
+                (_receiveNana, _receiveDefifa) = _nft.tokensClaimableFor(redemptionId);
             }
             uint256 _nanaBalance = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user);
             uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
+
 
             vm.prank(_user);
             JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
@@ -527,8 +532,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             });
 
             // Assert that the user received some of the fee tokens.
-            assertGt(IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user), _nanaBalance);
-            assertGt(IERC20(_defifaProjectTokenAccount).balanceOf(_user), _defifaBalance);
+            assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user), _nanaBalance + _receiveNana);
+            assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(_user), _defifaBalance + _receiveDefifa);
 
             if (scorecards[i].redemptionWeight == 0) continue;
 
