@@ -1015,7 +1015,12 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
             }
         }
     }
-
+    
+    /// @notice Claims the defifa and base protocol tokens for a beneficiary.
+    /// @param _beneficiary The address to claim tokens for.
+    /// @param shareToBeneficiary The share relative to the `outOfTotal` to send the user.
+    /// @param outOfTotal The total share that the `shareToBeneficiary` is relative to.
+    /// @return beneficiaryReceivedTokens A flag indicating if the beneficiary received any tokens.
     function _claimTokensFor(address _beneficiary, uint256 shareToBeneficiary, uint256 outOfTotal) internal returns (bool beneficiaryReceivedTokens) {
         // Calculate the share of $DEFIFA and $BASE_PROTOCOL tokens to send.
         uint256 baseProtocolAmount = baseProtocolToken.balanceOf(address(this)) * shareToBeneficiary / outOfTotal;
@@ -1069,14 +1074,5 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
 
         // Transfer the attestation units.
         _transferTierAttestationUnits(from, to, tier.id, tier.votingUnits);
-    }
-
-    // Utils OZ extension that is being reused for tier delegation.
-    function _add(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a + b;
-    }
-
-    function _subtract(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a - b;
     }
 }

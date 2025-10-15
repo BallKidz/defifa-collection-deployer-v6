@@ -38,6 +38,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     //*********************************************************************//
 
     /// @notice The duration of one block.
+    // NOTE: Should we stop using blockTime and instead use the timestamp? On L2s blockTime can be sub 1 second.
     uint256 internal immutable _blockTime;
 
     /// @notice The scorecards.
@@ -325,6 +326,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         uint256 _attestationStartTime = attestationStartTimeOf(_gameId);
         uint256 _timeUntilAttestationsBegin =
             block.timestamp > _attestationStartTime ? 0 : _attestationStartTime - block.timestamp;
+
         _scorecard.attestationsBegin = uint48(block.number + (_timeUntilAttestationsBegin / _blockTime));
         _scorecard.gracePeriodEnds = uint48(block.number + attestationGracePeriodOf(_gameId) / _blockTime);
 

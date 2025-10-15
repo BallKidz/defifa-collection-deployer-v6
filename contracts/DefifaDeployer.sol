@@ -247,9 +247,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
 
-    /// This contract must be payable to receive overflow allowance to settle commitments.
-    receive() external payable {}
-
     /// @notice Launches a new game owned by this contract with a DefifaDelegate attached.
     /// @param _launchProjectData Data necessary to fulfill the transaction to launch a game.
     /// @return gameId The ID of the newly configured game.
