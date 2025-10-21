@@ -26,6 +26,7 @@
   },
   "scripts": {
     "pretty": "prettier --write \"./**/*.{js,jsx,json,sol}\"",
-    "deploy:testnets": "source ./.env && npx sphinx propose ./contracts/scripts/Deploy.s.sol --networks testnets"
+    "deploy:testnets": "source ./.env && npx sphinx propose ./contracts/scripts/Deploy.s.sol --networks testnets",
+    "artifacts": "source ./.env && npx sphinx artifacts --org-id 'ea165b21-7cdc-4d7b-be59-ecdd4c26bee4' --project-name 'defifa-v5'"
   }
 }
