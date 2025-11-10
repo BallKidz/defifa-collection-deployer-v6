@@ -1,0 +1,17 @@
+{
+  "lib/base64": {
+    "branch": {
+      "name": "main",
+      "rev": "4d85607b18d981acff392d2e99ba654305552a97"
+    }
+  },
+  "lib/capsules": {
+    "rev": "7432ba95ac69ba4902076660b0dc9a90aeb26706"
+  },
+  "lib/forge-std": {
+    "rev": "4a79aca83f8075f8b1b4fe9153945fef08375630"
+  },
+  "lib/typeface": {
+    "rev": "edd52e2f7c8adc44e75b207bd279710f9b72f5e9"
+  }
+}

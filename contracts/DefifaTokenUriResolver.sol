@@ -15,6 +15,8 @@ import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
 import {IDefifaTokenUriResolver} from "./interfaces/IDefifaTokenUriResolver.sol";
 import {DefifaFontImporter} from "./libraries/DefifaFontImporter.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
+import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
+import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
 
 /// @title DefifaTokenUriResolver
 /// @notice Standard Token URIs for Defifa games.
@@ -27,7 +29,7 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
     //*********************************************************************//
 
     /// @notice The fidelity of the decimal returned in the NFT image.
-    uint256 private constant _IMG_DECIMAL_FIDELITY = 3;
+    uint256 private constant _IMG_DECIMAL_FIDELITY = 4;
 
     //*********************************************************************//
     // --------------- public immutable stored properties ---------------- //
@@ -58,7 +60,7 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
         IDefifaDelegate _delegate = IDefifaDelegate(_nft);
 
         // Get the game ID.
-        uint256 _gameId = _delegate.projectId();
+        uint256 _gameId = _delegate.PROJECT_ID();
 
         // Keep a reference to the game phase text.
         string memory _gamePhaseText;
@@ -110,12 +112,13 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
             );
 
             {
-                // Get a reference to the game phase.
-                DefifaGamePhase _gamePhase = _delegate.gamePhaseReporter().currentGamePhaseOf(_gameId);
+                // Get a reference to the game phase (tolerant to reporter issues).
+                (, DefifaGamePhase _gamePhase) =
+                    _safeGamePhase(_delegate.gamePhaseReporter(), _gameId);
 
-                // Keep a reference to the game pot.
-                (uint256 _gamePot, address _gamePotToken, uint256 _gamePotDecimals) =
-                    _delegate.gamePotReporter().currentGamePotOf(_gameId, false);
+                // Keep a reference to the game pot (tolerant to reporter issues).
+                (, uint256 _gamePot, address _gamePotToken, uint256 _gamePotDecimals) =
+                    _safeGamePot(_delegate.gamePotReporter(), _gameId);
 
                 // Include the amount redeemed.
                 _gamePot = _gamePot + _delegate.amountRedeemed();
@@ -169,54 +172,54 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
         parts[2] = Base64.encode(
             abi.encodePacked(
                 '<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">',
-                '<style>@font-face{font-family:"Capsules-500";src:url(data:font/truetype;charset=utf-8;base64,',
+                '<style>@font-face{font-family:"Capsules-300";src:url(data:font/truetype;charset=utf-8;base64,',
                 DefifaFontImporter.getSkinnyFontSource(typeface),
                 ');format("opentype");}',
-                '@font-face{font-family:"Capsules-700";src:url(data:font/truetype;charset=utf-8;base64,',
+                '@font-face{font-family:"Capsules-400";src:url(data:font/truetype;charset=utf-8;base64,',
                 DefifaFontImporter.getBeefyFontSource(typeface),
                 ');format("opentype");}',
                 "text{white-space:pre-wrap; width:100%; }</style>",
                 '<rect width="100%" height="100%" fill="#181424"/>',
-                '<text x="10" y="30" style="font-size:16px; font-family: Capsules-500; font-weight:500; fill: #c0b3f1;">GAME: ',
+                '<text x="10" y="30" style="font-size:16px; font-family: Capsules-300; font-weight:300; fill: #c0b3f1;">GAME: ',
                 _gameId.toString(),
                 " | POT: ",
                 _potText,
                 " | CARDS: ",
                 _delegate.store().totalSupplyOf(address(_delegate)).toString(),
                 "</text>",
-                '<text x="10" y="50" style="font-size:16px; font-family: Capsules-500; font-weight:500; fill: #ed017c;">',
+                '<text x="10" y="50" style="font-size:16px; font-family: Capsules-300; font-weight:300; fill: #ed017c;">',
                 _gamePhaseText,
                 "</text>",
-                '<text x="10" y="85" style="font-size:26px; font-family: Capsules-500; font-weight:500; fill: #c0b3f1;">',
+                '<text x="10" y="85" style="font-size:26px; font-family: Capsules-300; font-weight:300; fill: #c0b3f1;">',
                 _getSubstring(_title, 0, 30),
                 "</text>",
-                '<text x="10" y="120" style="font-size:26px; font-family: Capsules-500; font-weight:500; fill: #c0b3f1;">',
+                '<text x="10" y="120" style="font-size:26px; font-family: Capsules-300; font-weight:300; fill: #c0b3f1;">',
                 _getSubstring(_title, 30, 60),
                 "</text>",
-                '<text x="10" y="205" style="font-size:80px; font-family: Capsules-700; font-weight:700; fill: #fea282;">',
+                '<text x="10" y="205" style="font-size:80px; font-family: Capsules-400; font-weight:400; fill: #fea282;">',
                 bytes(_getSubstring(_team, 20, 30)).length != 0 && bytes(_getSubstring(_team, 10, 20)).length != 0
                     ? _getSubstring(_team, 0, 10)
                     : "",
                 "</text>",
-                '<text x="10" y="295" style="font-size:80px; font-family: Capsules-700; font-weight:700; fill: #fea282;">',
+                '<text x="10" y="295" style="font-size:80px; font-family: Capsules-400; font-weight:400; fill: #fea282;">',
                 bytes(_getSubstring(_team, 20, 30)).length != 0
                     ? _getSubstring(_team, 10, 20)
                     : bytes(_getSubstring(_team, 10, 20)).length != 0 ? _getSubstring(_team, 0, 10) : "",
                 "</text>",
-                '<text x="10" y="385" style="font-size:80px; font-family: Capsules-700; font-weight:700; fill: #fea282;">',
+                '<text x="10" y="385" style="font-size:80px; font-family: Capsules-400; font-weight:400; fill: #fea282;">',
                 bytes(_getSubstring(_team, 20, 30)).length != 0
                     ? _getSubstring(_team, 20, 30)
                     : bytes(_getSubstring(_team, 10, 20)).length != 0
                         ? _getSubstring(_team, 10, 20)
                         : _getSubstring(_team, 0, 10),
                 "</text>",
-                '<text x="10" y="430" style="font-size:16px; font-family: Capsules-500; font-weight:500; fill: #c0b3f1;">TOKEN ID: ',
+                '<text x="10" y="430" style="font-size:16px; font-family: Capsules-300; font-weight:300; fill: #c0b3f1;">TOKEN ID: ',
                 _tokenId.toString(),
                 "</text>",
-                '<text x="10" y="455" style="font-size:16px; font-family: Capsules-500; font-weight:500; fill: #c0b3f1;">RARITY: ',
+                '<text x="10" y="455" style="font-size:16px; font-family: Capsules-300; font-weight:300; fill: #c0b3f1;">RARITY: ',
                 _rarityText,
                 "</text>",
-                '<text x="10" y="480" style="font-size:16px; font-family: Capsules-500; font-weight:500; fill: #c0b3f1;">BACKED BY: ',
+                '<text x="10" y="480" style="font-size:16px; font-family: Capsules-300; font-weight:300; fill: #c0b3f1;">BACKED BY: ',
                 _valueText,
                 "</text>",
                 "</svg>"
@@ -250,6 +253,44 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
             }
         }
         return string(_result);
+    }
+
+    /// @notice Safely fetch the current game phase, tolerating reporter reverts.
+    function _safeGamePhase(IDefifaGamePhaseReporter _reporter, uint256 _gameId)
+        private
+        view
+        returns (bool success, DefifaGamePhase phase)
+    {
+        if (address(_reporter) == address(0)) return (false, DefifaGamePhase.COUNTDOWN);
+        try _reporter.currentGamePhaseOf(_gameId) returns (DefifaGamePhase phase_) {
+            return (true, phase_);
+        } catch {
+            if (_gameId != 0) {
+                try _reporter.currentGamePhaseOf(0) returns (DefifaGamePhase fallbackPhase) {
+                    return (true, fallbackPhase);
+                } catch {}
+            }
+        }
+        return (false, DefifaGamePhase.COUNTDOWN);
+    }
+
+    /// @notice Safely fetch the current game pot, tolerating reporter reverts.
+    function _safeGamePot(IDefifaGamePotReporter _reporter, uint256 _gameId)
+        private
+        view
+        returns (bool success, uint256 pot, address token, uint256 decimals)
+    {
+        if (address(_reporter) == address(0)) return (false, 0, JBTokens.ETH, 18);
+        try _reporter.currentGamePotOf(_gameId, false) returns (uint256 pot_, address token_, uint256 decimals_) {
+            return (true, pot_, token_, decimals_);
+        } catch {
+            if (_gameId != 0) {
+                try _reporter.currentGamePotOf(0, false) returns (uint256 pot_, address token_, uint256 decimals_) {
+                    return (true, pot_, token_, decimals_);
+                } catch {}
+            }
+        }
+        return (false, 0, JBTokens.ETH, 18);
     }
 
     /// @notice Formats a balance from a fixed point number to a string.

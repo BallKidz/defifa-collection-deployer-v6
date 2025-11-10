@@ -330,10 +330,37 @@ var require_open = __commonJS({
 // me.js SVG if no tier image exists
 var fs = require("fs");
 var open = require_open();
-var dataURI = process.argv[process.argv.length - 1];
+var {execSync} = require("child_process");
+
+var args = process.argv.slice(2);
+if (args.length === 0) {
+  console.error("Usage: node open.js <tokenURI | ipfsCID | contractAddress tokenId [rpcUrl]>");
+  process.exit(1);
+}
+
+let dataURI = args[0];
+if (dataURI.startsWith("0x") && args[1]) {
+  const tokenId = args[1];
+  const rpcUrl = args[2] || process.env.RPC_URL || process.env.SEPOLIA_RPC_URL || process.env.MAINNET_RPC_URL;
+  if (!rpcUrl) {
+    console.error("Missing RPC URL. Provide as third argument or set RPC_URL/SEPOLIA_RPC_URL/MAINNET_RPC_URL env var.");
+    process.exit(1);
+  }
+  try {
+    const result = execSync(
+      `cast call ${dataURI} "tokenURI(uint256)(string)" ${tokenId} --rpc-url ${rpcUrl}`,
+      {encoding: "utf8"}
+    );
+    dataURI = result.trim();
+  } catch (error) {
+    console.error("Failed to fetch tokenURI:", error.message || error);
+    process.exit(1);
+  }
+}
+
 if (dataURI.startsWith("Qm")) {
-  var htmlTemplate = '<a href="https://ipfs.io/ipfs/'+dataURI+'" target="_blank">Go to Token Metadata</a>';
-  var data = fs.writeFileSync("./src/onchainTierImage.html", htmlTemplate);  
+  var htmlTemplate = '<a href="https://ipfs.io/ipfs/' + dataURI + '" target="_blank">Go to Token Metadata</a>';
+  fs.writeFileSync("./src/onchainTierImage.html", htmlTemplate);
   open("./src/onchainTierImage.html");
   return;
 }

@@ -2,168 +2,335 @@
 pragma solidity ^0.8.16;
 
 import "forge-std/Test.sol";
+import "lib/base64/base64.sol";
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/proxy/Clones.sol";
-import "@jbx-protocol/juice-contracts-v3/contracts/libraries/JBTokens.sol";
-import "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBDirectory.sol";
-import "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBController.sol";
-import "@jbx-protocol/juice-contracts-v3/contracts/interfaces/IJBFundingCycleStore.sol";
-import "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJBTiered721DelegateStore.sol";
-import "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJB721TokenUriResolver.sol";
-import "../DefifaDelegate.sol";
-import "../DefifaTokenUriResolver.sol";
+import {JBTokens} from "@jbx-protocol/juice-contracts-v3/contracts/libraries/JBTokens.sol";
+import {JB721Tier} from "@jbx-protocol/juice-721-delegate/contracts/structs/JB721Tier.sol";
+import {
+    IJBTiered721DelegateStore
+} from "@jbx-protocol/juice-721-delegate/contracts/interfaces/IJBTiered721DelegateStore.sol";
+import {JBIpfsDecoder} from "@jbx-protocol/juice-721-delegate/contracts/libraries/JBIpfsDecoder.sol";
+
+import "../DefifaSVGTokenUriResolver.sol";
+import "../enums/DefifaGamePhase.sol";
 import "../interfaces/IDefifaGamePhaseReporter.sol";
-import "../interfaces/IDefifaGamePhaseReporter.sol";
-import "../interfaces/IDefifaDelegate.sol";
-
-// import {CapsulesTypeface} from "../lib/capsules/contracts/CapsulesTypeface.sol";
-
-contract GamePhaseReporter is IDefifaGamePhaseReporter {
-    function currentGamePhaseOf(uint256 _gameId) external pure returns (DefifaGamePhase) {
-        _gameId;
-        return DefifaGamePhase.COUNTDOWN;
-    }
-}
-
-contract GamePotReporter is IDefifaGamePotReporter {
-    function fulfilledCommitmentsOf(uint256 _gameId) external pure returns (uint256) {
-        _gameId;
-        return 0;
-    }
-
-    function currentGamePotOf(uint256 _gameId, bool _includeCommitments)
-        external
-        pure
-        returns (uint256, address, uint256)
-    {
-        _gameId;
-        _includeCommitments;
-        return (106900000000000000, JBTokens.ETH, 18);
-    }
-}
+import "../interfaces/IDefifaGamePotReporter.sol";
 
 contract SVGTest is Test {
-    IJBController _controller;
-    IJBDirectory _directory;
-    IJBFundingCycleStore _fundingCycleStore;
-    IJBTiered721DelegateStore _store;
-    ITypeface _typeface;
-
-    address delegateRegistry = address(0);
+    DefifaSVGTokenUriResolver internal resolver;
+    MockStore internal store;
+    MockGamePhaseReporter internal phaseReporter;
+    MockGamePotReporter internal potReporter;
 
     function setUp() public {
-        vm.createSelectFork("https://rpc.ankr.com/eth");
-        _controller = IJBController(0xFFdD70C318915879d5192e8a0dcbFcB0285b3C98);
-        _directory = IJBDirectory(0x65572FB928b46f9aDB7cfe5A4c41226F636161ea);
-        _fundingCycleStore = IJBFundingCycleStore(0x6f18cF9173136c0B5A6eBF45f19D58d3ff2E17e6);
-        _store = IJBTiered721DelegateStore(0x67C31B9557201A341312CF78d315542b5AD83074);
-        _typeface = ITypeface(0xA77b7D93E79f1E6B4f77FaB29d9ef85733A3D44A);
+        resolver = new DefifaSVGTokenUriResolver();
+        store = new MockStore();
+        phaseReporter = new MockGamePhaseReporter();
+        potReporter = new MockGamePotReporter();
     }
 
-    event K(bytes4 k);
+    function testReturnsIpfsUriWhenTierHasEncodedUri() public {
+        uint256 tokenId = 1001;
+        bytes32 encodedIpfs = bytes32(0xfb17901b2b08444d2bbe92ca39bdd64eab27b0481e841fcd9f14aeb56e28513b);
 
-    function testWithTierImage() public {
-        emit K(type(IDefifaDelegate).interfaceId);
-        IDefifaDelegate _delegate =
-            DefifaDelegate(Clones.clone(address(new DefifaDelegate(IERC20(address(0)), IERC20(address(0))))));
-        IJB721TokenUriResolver _resolver = new DefifaTokenUriResolver(_typeface);
-        IDefifaGamePhaseReporter _gamePhaseReporter = new GamePhaseReporter();
-        IDefifaGamePotReporter _gamePotReporter = new GamePotReporter();
+        store.setTier(
+            tokenId,
+            JB721Tier({
+                id: 1,
+                price: 1e18,
+                remainingQuantity: 0,
+                initialQuantity: 100,
+                votingUnits: 1,
+                reservedRate: 0,
+                reservedTokenBeneficiary: address(0),
+                encodedIPFSUri: encodedIpfs,
+                category: 0,
+                allowManualMint: false,
+                transfersPausable: false,
+                resolvedUri: ""
+            })
+        );
+        store.setTotalSupply(42);
 
-        JB721TierParams[] memory _tiers = new JB721TierParams[](1);
-        _tiers[0] = JB721TierParams({
-            price: 1e18,
-            initialQuantity: 100,
-            votingUnits: 1,
-            reservedRate: 0,
-            reservedTokenBeneficiary: address(0),
-            encodedIPFSUri: bytes32(0xfb17901b2b08444d2bbe92ca39bdd64eab27b0481e841fcd9f14aeb56e28513b),
-            category: 0,
-            allowManualMint: false,
-            shouldUseReservedTokenBeneficiaryAsDefault: false,
-            transfersPausable: false,
-            useVotingUnits: true
+        MockDefifaDelegate delegate = new MockDefifaDelegate({
+            projectId_: 123,
+            name_: "Example collection",
+            baseUri_: "ipfs://base/",
+            store_: address(store),
+            phaseReporter_: address(phaseReporter),
+            potReporter_: address(potReporter),
+            amountRedeemed_: 0,
+            redemptionWeight_: 1,
+            totalRedemptionWeight_: 100,
+            redemptionWeightIsSet_: false
         });
-        string[] memory _tierNames = new string[](1);
-        _tierNames[0] = "lakers win. no one scores over 40pts.";
+        delegate.setTierName(1, "Example Team");
 
-        _delegate.initialize({
-            gameId: 12345,
-            directory: _directory,
-            name: "Example collection",
-            symbol: "EX",
-            fundingCycleStore: _fundingCycleStore,
-            baseUri: "",
-            tokenUriResolver: _resolver,
-            contractUri: "",
-            tiers: _tiers,
-            currency: 1,
-            store: _store,
-            gamePhaseReporter: _gamePhaseReporter,
-            gamePotReporter: _gamePotReporter,
-            defaultAttestationDelegate: address(0),
-            tierNames: _tierNames
-        });
-
-        string[] memory inputs = new string[](3);
-        inputs[0] = "node";
-        inputs[1] = "./open.js";
-        inputs[2] = _resolver.tokenUriOf(address(_delegate), 1000000001);
-        bytes memory res = vm.ffi(inputs);
-        res;
-        vm.ffi(inputs);
+        string memory tokenUri = resolver.tokenUriOf(address(delegate), tokenId);
+        string memory expected = JBIpfsDecoder.decode(delegate.baseURI(), encodedIpfs);
+        assertEq(tokenUri, expected);
     }
 
-    function testWithOutTierImage() public {
-        IDefifaDelegate _delegate =
-            DefifaDelegate(Clones.clone(address(new DefifaDelegate(IERC20(address(0)), IERC20(address(0))))));
-        DefifaTokenUriResolver _resolver = new DefifaTokenUriResolver(_typeface);
-        IDefifaGamePhaseReporter _gamePhaseReporter = new GamePhaseReporter();
-        IDefifaGamePotReporter _gamePotReporter = new GamePotReporter();
+    function testReturnsSvgMetadataWhenTierHasNoEncodedUri() public {
+        uint256 tokenId = 2002;
+        store.setTier(
+            tokenId,
+            JB721Tier({
+                id: 7,
+                price: 25e18,
+                remainingQuantity: 90,
+                initialQuantity: 100,
+                votingUnits: 2,
+                reservedRate: 0,
+                reservedTokenBeneficiary: address(0),
+                encodedIPFSUri: bytes32(0),
+                category: 0,
+                allowManualMint: false,
+                transfersPausable: false,
+                resolvedUri: ""
+            })
+        );
+        store.setTotalSupply(123);
 
-        JB721TierParams[] memory _tiers = new JB721TierParams[](1);
-        _tiers[0] = JB721TierParams({
-            price: 1e18,
-            initialQuantity: 100,
-            votingUnits: 0,
-            reservedRate: 0,
-            reservedTokenBeneficiary: address(0),
-            encodedIPFSUri: bytes32(""),
-            category: 0,
-            allowManualMint: false,
-            shouldUseReservedTokenBeneficiaryAsDefault: false,
-            transfersPausable: false,
-            useVotingUnits: true
+        MockDefifaDelegate delegate = new MockDefifaDelegate({
+            projectId_: 456,
+            name_: "Defifa Finals",
+            baseUri_: "ipfs://base/",
+            store_: address(store),
+            phaseReporter_: address(phaseReporter),
+            potReporter_: address(potReporter),
+            amountRedeemed_: 4 ether,
+            redemptionWeight_: 5,
+            totalRedemptionWeight_: 10,
+            redemptionWeightIsSet_: true
         });
+        delegate.setTierName(7, "D in 4");
 
-        string[] memory _tierNames = new string[](1);
-        _tierNames[0] = "D in 4";
+        phaseReporter.setPhase(DefifaGamePhase.SCORING);
+        potReporter.setPot(200e18, JBTokens.ETH, 18);
 
-        _delegate.initialize({
-            gameId: 123,
-            directory: _directory,
-            name: "NBA Finals (1)",
-            symbol: "DEFIFA: EXAMPLE",
-            fundingCycleStore: _fundingCycleStore,
-            baseUri: "",
-            tokenUriResolver: _resolver,
-            contractUri: "",
-            tiers: _tiers,
-            currency: 1,
-            store: _store,
-            gamePhaseReporter: _gamePhaseReporter,
-            gamePotReporter: _gamePotReporter,
-            defaultAttestationDelegate: address(0),
-            tierNames: _tierNames
-        });
+        string memory tokenUri = resolver.tokenUriOf(address(delegate), tokenId);
+        assertTrue(_hasBase64JsonPrefix(tokenUri));
 
-        string[] memory inputs = new string[](3);
-        inputs[0] = "node";
-        inputs[1] = "./open.js";
-        inputs[2] = _resolver.tokenUriOf(address(_delegate), 1000000000);
-        bytes memory res = vm.ffi(inputs);
-        res;
-        vm.ffi(inputs);
+        string memory json = string(Base64.decode(_stripPrefix(tokenUri)));
+        bool hasName = _contains(json, '"name":"D in 4"');
+        bool hasDescription = _contains(json, '"description":"Team: D in 4, ID: 7."');
+        bool hasImage = _contains(json, '"image":"data:image/svg+xml;base64,');
+
+        require(hasName, "name");
+        require(hasDescription, "description");
+        require(hasImage, "image");
+    }
+
+    function _stripPrefix(string memory tokenUri) internal pure returns (string memory) {
+        bytes memory uriBytes = bytes(tokenUri);
+        bytes memory prefix = bytes("data:application/json;base64,");
+        require(uriBytes.length > prefix.length, "Invalid token URI");
+        for (uint256 i; i < prefix.length; i++) {
+            require(uriBytes[i] == prefix[i], "Missing prefix");
+        }
+        bytes memory data = new bytes(uriBytes.length - prefix.length);
+        for (uint256 i = prefix.length; i < uriBytes.length; i++) {
+            data[i - prefix.length] = uriBytes[i];
+        }
+        return string(data);
+    }
+
+    function _hasBase64JsonPrefix(string memory tokenUri) internal pure returns (bool) {
+        bytes memory uriBytes = bytes(tokenUri);
+        bytes memory prefix = bytes("data:application/json;base64,");
+        if (uriBytes.length < prefix.length) return false;
+        for (uint256 i; i < prefix.length; i++) {
+            if (uriBytes[i] != prefix[i]) return false;
+        }
+        return true;
+    }
+
+    function _contains(string memory haystack, string memory needle) internal pure returns (bool) {
+        bytes memory haystackBytes = bytes(haystack);
+        bytes memory needleBytes = bytes(needle);
+
+        if (needleBytes.length == 0 || needleBytes.length > haystackBytes.length) {
+            return false;
+        }
+
+        for (uint256 i; i <= haystackBytes.length - needleBytes.length; i++) {
+            bool matchFound = true;
+            for (uint256 j; j < needleBytes.length; j++) {
+                if (haystackBytes[i + j] != needleBytes[j]) {
+                    matchFound = false;
+                    break;
+                }
+            }
+            if (matchFound) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+contract MockStore {
+    mapping(uint256 => JB721Tier) internal _tiersByTokenId;
+    uint256 internal _totalSupply;
+
+    function setTier(uint256 _tokenId, JB721Tier memory _tier) external {
+        _tiersByTokenId[_tokenId] = _tier;
+    }
+
+    function setTotalSupply(uint256 _totalSupply_) external {
+        _totalSupply = _totalSupply_;
+    }
+
+    function tierOfTokenId(address, uint256 _tokenId, bool) external view returns (JB721Tier memory) {
+        return _tiersByTokenId[_tokenId];
+    }
+
+    function totalSupplyOf(address) external view returns (uint256) {
+        return _totalSupply;
+    }
+}
+
+contract MockGamePhaseReporter is IDefifaGamePhaseReporter {
+    DefifaGamePhase private _phase = DefifaGamePhase.COUNTDOWN;
+
+    function setPhase(DefifaGamePhase phase_) external {
+        _phase = phase_;
+    }
+
+    function currentGamePhaseOf(uint256) external view override returns (DefifaGamePhase) {
+        return _phase;
+    }
+}
+
+contract MockGamePotReporter is IDefifaGamePotReporter {
+    uint256 private _pot = 106900000000000000;
+    address private _token = JBTokens.ETH;
+    uint256 private _decimals = 18;
+    uint256 private _commitments;
+
+    function setPot(uint256 pot_, address token_, uint256 decimals_) external {
+        _pot = pot_;
+        _token = token_;
+        _decimals = decimals_;
+    }
+
+    function setCommitments(uint256 commitments_) external {
+        _commitments = commitments_;
+    }
+
+    function fulfilledCommitmentsOf(uint256) external view override returns (uint256) {
+        return _commitments;
+    }
+
+    function currentGamePotOf(uint256, bool includeCommitments)
+        external
+        view
+        override
+        returns (uint256, address, uint256)
+    {
+        if (includeCommitments) {
+            return (_pot + _commitments, _token, _decimals);
+        }
+        return (_pot, _token, _decimals);
+    }
+}
+
+contract MockDefifaDelegate {
+    uint256 private _projectId;
+    string private _name;
+    string private _baseUri;
+    address private _store;
+    address private _phaseReporter;
+    address private _potReporter;
+    uint256 private _amountRedeemed;
+    uint256 private _redemptionWeight;
+    uint256 private _totalRedemptionWeight;
+    bool private _redemptionWeightIsSet;
+    mapping(uint256 => string) private _tierNames;
+
+    constructor(
+        uint256 projectId_,
+        string memory name_,
+        string memory baseUri_,
+        address store_,
+        address phaseReporter_,
+        address potReporter_,
+        uint256 amountRedeemed_,
+        uint256 redemptionWeight_,
+        uint256 totalRedemptionWeight_,
+        bool redemptionWeightIsSet_
+    ) {
+        _projectId = projectId_;
+        _name = name_;
+        _baseUri = baseUri_;
+        _store = store_;
+        _phaseReporter = phaseReporter_;
+        _potReporter = potReporter_;
+        _amountRedeemed = amountRedeemed_;
+        _redemptionWeight = redemptionWeight_;
+        _totalRedemptionWeight = totalRedemptionWeight_;
+        _redemptionWeightIsSet = redemptionWeightIsSet_;
+    }
+
+    function setTierName(uint256 tierId, string memory name_) external {
+        _tierNames[tierId] = name_;
+    }
+
+    function projectId() external view returns (uint256) {
+        return _projectId;
+    }
+
+    function name() external view returns (string memory) {
+        return _name;
+    }
+
+    function store() external view returns (IJBTiered721DelegateStore) {
+        return IJBTiered721DelegateStore(_store);
+    }
+
+    function tierNameOf(uint256 tierId) external view returns (string memory) {
+        return _tierNames[tierId];
+    }
+
+    function gamePhaseReporter() external view returns (IDefifaGamePhaseReporter) {
+        return IDefifaGamePhaseReporter(_phaseReporter);
+    }
+
+    function gamePotReporter() external view returns (IDefifaGamePotReporter) {
+        return IDefifaGamePotReporter(_potReporter);
+    }
+
+    function amountRedeemed() external view returns (uint256) {
+        return _amountRedeemed;
+    }
+
+    function setAmountRedeemed(uint256 amountRedeemed_) external {
+        _amountRedeemed = amountRedeemed_;
+    }
+
+    function redemptionWeightOf(uint256) external view returns (uint256) {
+        return _redemptionWeight;
+    }
+
+    function setRedemptionWeight(uint256 redemptionWeight_, uint256 totalRedemptionWeight_) external {
+        _redemptionWeight = redemptionWeight_;
+        _totalRedemptionWeight = totalRedemptionWeight_;
+    }
+
+    function TOTAL_REDEMPTION_WEIGHT() external view returns (uint256) {
+        return _totalRedemptionWeight;
+    }
+
+    function redemptionWeightIsSet() external view returns (bool) {
+        return _redemptionWeightIsSet;
+    }
+
+    function setRedemptionWeightIsSet(bool redemptionWeightIsSet_) external {
+        _redemptionWeightIsSet = redemptionWeightIsSet_;
+    }
+
+    function baseURI() external view returns (string memory) {
+        return _baseUri;
     }
 }

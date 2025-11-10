@@ -4,4 +4,5 @@
 prb-math=node_modules/prb-math/
 ds-test/=lib/forge-std/lib/ds-test/src/
 forge-std/=lib/forge-std/src/
-scripty.sol=node_modules/scripty.sol/
+scripty.sol/contracts/=node_modules/scripty.sol/contracts/
+scripty.sol/=node_modules/scripty.sol/

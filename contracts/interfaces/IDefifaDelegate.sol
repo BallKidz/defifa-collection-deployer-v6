@@ -47,6 +47,8 @@ interface IDefifaDelegate is IJB721Delegate {
 
     function TOTAL_REDEMPTION_WEIGHT() external view returns (uint256);
 
+    function PROJECT_ID() external view returns (uint256);
+
     function defifaToken() external view returns (IERC20);
 
     function baseProtocolToken() external view returns (IERC20);
