@@ -268,6 +268,9 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Set a default attestation start time if needed.
         if (_attestationStartTime == 0) _attestationStartTime = block.timestamp;
 
+        // Enforce a minimum grace period of 1 day to prevent instant ratification.
+        if (_attestationGracePeriod < 1 days) _attestationGracePeriod = 1 days;
+
         // Pack the values.
         uint256 _packed;
         // attestation start time in bits 0-47 (48 bits).
