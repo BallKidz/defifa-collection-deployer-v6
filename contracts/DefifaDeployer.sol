@@ -390,8 +390,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             _tierNames: _tierNames
         });
         
-        // Launch the Juicebox project, and sanity check our gameId.
-        assert(gameId == _launchGame(_launchProjectData, gameId, address(_hook)));
+        // Launch the Juicebox project.
+        uint256 _actualGameId = _launchGame(_launchProjectData, gameId, address(_hook));
+
+        // Revert if the game ID does not match (e.g. front-run by another project creation).
+        if (gameId != _actualGameId) revert INVALID_GAME_CONFIGURATION();
 
         // Clone and initialize the new governor.
         governor.initializeGame({
