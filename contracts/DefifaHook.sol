@@ -274,6 +274,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             - (_burnedTokens - tokensRedeemedFrom[_tierId]);
 
         // Calculate the percentage of the tier cashOut amount a single token counts for.
+        // NOTE: Integer division truncates. Up to (_totalTokensForCashoutInTier - 1) units of weight
+        // per tier are permanently unclaimable. With TOTAL_CASHOUT_WEIGHT = 1e18 and typical token
+        // counts, this amounts to negligible dust (< 1 wei per tier in most games).
         return _weight / _totalTokensForCashoutInTier;
     }
 
