@@ -366,8 +366,20 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             }
         }
 
-        // Clone and initialize the new hook with a new token uri resolver.
-        DefifaHook _hook = DefifaHook(Clones.clone(hookCodeOrigin));
+        // Increment the nonce for this deployment.
+        uint256 _currentNonce = ++_nonce;
+
+        // Clone deterministically using sender and nonce to prevent front-running.
+        // Clones.clone() creates the proxy before initialize() is called, allowing an
+        // attacker to front-run initialization and DOS the game deployment. Using
+        // cloneDeterministic with msg.sender in the salt prevents this since a different
+        // caller produces a different address.
+        DefifaHook _hook = DefifaHook(
+            Clones.cloneDeterministic(
+                hookCodeOrigin,
+                keccak256(abi.encodePacked(msg.sender, _currentNonce))
+            )
+        );
 
         // Use the default uri resolver if provided, else use the hardcoded generic default.
         IJB721TokenUriResolver _uriResolver = _launchProjectData.defaultTokenUriResolver
@@ -404,7 +416,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         _hook.transferOwnership(address(governor));
 
         // Add the hook to the registry, contract nonce starts at 1
-        registry.registerAddress(address(this), ++_nonce);
+        registry.registerAddress(address(this), _currentNonce);
 
         emit LaunchGame(gameId, _hook, governor, _uriResolver, msg.sender);
     }
