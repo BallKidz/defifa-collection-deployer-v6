@@ -487,6 +487,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // Update the ruleset to the final one.
         controller.queueRulesetsOf(_gameId, rulesetConfigs, 'Defifa game has finished.');
 
+        // Update the fulfilled commitments to the actual pot amount.
+        fulfilledCommitmentsOf[_gameId] = _pot;
+
         emit FulfilledCommitments({
             gameId: _gameId,
             pot: _pot,
