@@ -639,8 +639,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             }
         }
 
-        // Make sure the cumulative amount is contained within the total cashOut weight.
-        if (_cumulativeCashOutWeight > TOTAL_CASHOUT_WEIGHT) revert INVALID_CASHOUT_WEIGHTS();
+        // Make sure the cumulative amount is exactly the total cashOut weight.
+        if (_cumulativeCashOutWeight != TOTAL_CASHOUT_WEIGHT) revert INVALID_CASHOUT_WEIGHTS();
 
         // Mark the cashOut weight as set.
         cashOutWeightIsSet = true;
