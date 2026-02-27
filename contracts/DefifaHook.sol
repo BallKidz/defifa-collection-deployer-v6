@@ -11,6 +11,7 @@ import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataRes
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
@@ -21,6 +22,7 @@ import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 /// @notice A hook that transforms Juicebox treasury interactions into a Defifa game.
 contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     using Checkpoints for Checkpoints.Trace208;
+    using SafeERC20 for IERC20;
 
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -1027,8 +1029,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         uint256 defifaAmount = defifaToken.balanceOf(address(this)) * shareToBeneficiary / outOfTotal;
 
         // If there is an amount we should send, send it.
-        if (defifaAmount != 0)  defifaToken.transfer(_beneficiary, defifaAmount);
-        if (baseProtocolAmount != 0) baseProtocolToken.transfer(_beneficiary, baseProtocolAmount);
+        if (defifaAmount != 0)  defifaToken.safeTransfer(_beneficiary, defifaAmount);
+        if (baseProtocolAmount != 0) baseProtocolToken.safeTransfer(_beneficiary, baseProtocolAmount);
 
         emit ClaimedTokens(_beneficiary, defifaAmount, baseProtocolAmount, msg.sender);
         
