@@ -398,8 +398,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Set the ratified scorecard.
         ratifiedScorecardIdOf[_gameId] = scorecardId;
 
-        // Execute the scorecard.
-        // TODO: Check why we do it this way.
+        // Execute the scorecard via low-level call since the governor is the delegate's owner.
         (bool success, bytes memory returndata) = _metadata.dataHook.call(_calldata);
         Address.verifyCallResult(success, returndata);
 

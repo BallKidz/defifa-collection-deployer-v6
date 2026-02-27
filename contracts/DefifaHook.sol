@@ -431,7 +431,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
     /// @notice The $DEFIFA token that is expected to be issued from paying fees.
     /// @notice The $BASE_PROTOCOL token that is expected to be issued from paying fees.
-    // TODO: Change this initial owner (prob).
+    /// @dev The initial owner is msg.sender; ownership is transferred to the governor after initialization.
     constructor(IJBDirectory _directory, IERC20 _defifaToken, IERC20 _baseProtocolToken) Ownable(msg.sender) JB721Hook(_directory) {
         codeOrigin = address(this);
         defifaToken = _defifaToken;
@@ -657,7 +657,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         external
         payable
         virtual
-        // TODO:Check if we need to make any changes here as we are overriding the new JB721Hook instead.
         override(IJBCashOutHook, JB721Hook)
     {
         // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
@@ -812,7 +811,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             JBMetadataResolver.getDataFor(JBMetadataResolver.getId("pay", codeOrigin), context.payerMetadata);
 
         if (!found) {
-           // TODO: Revert? 
            return;
         }
 
