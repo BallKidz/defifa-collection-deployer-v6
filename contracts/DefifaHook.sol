@@ -11,15 +11,15 @@ import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataRes
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
+import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
 import {DefifaTierCashOutWeight} from "./structs/DefifaTierCashOutWeight.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 
-/// @title DefifaDelegate
-/// @notice A delegate that transforms Juicebox treasury interactions into a Defifa game.
-contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
+/// @title DefifaHook
+/// @notice A hook that transforms Juicebox treasury interactions into a Defifa game.
+contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     using Checkpoints for Checkpoints.Trace208;
 
     //*********************************************************************//
@@ -97,7 +97,7 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
     // --------------------- public stored properties -------------------- //
     //*********************************************************************//
 
-    /// @notice The address of the origin 'DefifaDelegate', used to check in the init if the contract is the original or not
+    /// @notice The address of the origin 'DefifaHook', used to check in the init if the contract is the original or not
     address public immutable override codeOrigin;
 
     /// @notice The contract that stores and manages the NFT's data.
@@ -422,7 +422,7 @@ contract DefifaDelegate is JB721Hook, Ownable, IDefifaDelegate {
     /// @dev See {IERC165-supportsInterface}.
     /// @param _interfaceId The ID of the interface to check for adherence to.
     function supportsInterface(bytes4 _interfaceId) public view override(IERC165, JB721Hook) returns (bool) {
-        return _interfaceId == type(IDefifaDelegate).interfaceId || JB721Hook.supportsInterface(_interfaceId);
+        return _interfaceId == type(IDefifaHook).interfaceId || JB721Hook.supportsInterface(_interfaceId);
     }
 
     //*********************************************************************//

@@ -4,14 +4,14 @@ pragma solidity ^0.8.16;
 import "@prb/math/src/Common.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
+import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGovernor} from "./interfaces/IDefifaGovernor.sol";
 import {IDefifaDeployer} from "./interfaces/IDefifaDeployer.sol";
 import {DefifaScorecard} from "./structs/DefifaScorecard.sol";
 import {DefifaAttestations} from "./structs/DefifaAttestations.sol";
 import {DefifaTierCashOutWeight} from "./structs/DefifaTierCashOutWeight.sol";
 import {DefifaScorecardState} from "./enums/DefifaScorecardState.sol";
-import {DefifaDelegate} from "./DefifaDelegate.sol";
+import {DefifaHook} from "./DefifaHook.sol";
 
 import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
 import {JBRulesetMetadata} from '@bananapus/core-v5/src/structs/JBRulesetMetadata.sol';
@@ -103,16 +103,16 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     }
 
     /// @notice The ID of a scorecard representing the provided tier weights.
-    /// @param _gameDelegate The address where the game is being played.
+    /// @param _gameHook The address where the game is being played.
     /// @param _tierWeights The weights of each tier in the scorecard.
-    function scorecardIdOf(address _gameDelegate, DefifaTierCashOutWeight[] calldata _tierWeights)
+    function scorecardIdOf(address _gameHook, DefifaTierCashOutWeight[] calldata _tierWeights)
         external
         pure
         virtual
         override
         returns (uint256)
     {
-        return _hashScorecardOf(_gameDelegate, _buildScorecardCalldataFor(_tierWeights));
+        return _hashScorecardOf(_gameHook, _buildScorecardCalldataFor(_tierWeights));
     }
 
     //*********************************************************************//
@@ -187,7 +187,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
         // Get a reference to the number of tiers.
-        uint256 _numberOfTiers = IDefifaDelegate(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
+        uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
 
         // Keep a reference to the total elligible tier weight.
         uint256 _elligibleTierWeights;
@@ -195,7 +195,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         for (uint256 _i; _i < _numberOfTiers; _i++) {
             // If there are tokens minted from the tier, take its voting power into consideration.
             // @NOTE: This should be double checked to make sure its correct.
-            if (IDefifaDelegate(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
+            if (IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
                 _elligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
             }
         }
@@ -221,7 +221,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
         // Get a reference to the number of tiers.
-        uint256 _numberOfTiers = IDefifaDelegate(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
+        uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
 
         for (uint256 _i; _i < _numberOfTiers; _i++) {
             // Tier's are 1 indexed;
@@ -229,7 +229,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
             // Keep a reference to the number of tier attestations for the account.
             uint256 _tierAttestationUnitsForAccount =
-                IDefifaDelegate(_metadata.dataHook).getPastTierAttestationUnitsOf(_account, _tierId, _timestamp);
+                IDefifaHook(_metadata.dataHook).getPastTierAttestationUnitsOf(_account, _tierId, _timestamp);
 
             // If there is tier attestation power, increment the result by the proportion of attestations the account has to the total, multiplied by the tier's maximum attestation power.
             unchecked {
@@ -237,7 +237,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
                     attestationPower += mulDiv(
                         MAX_ATTESTATION_POWER_TIER,
                         _tierAttestationUnitsForAccount,
-                        IDefifaDelegate(_metadata.dataHook).getPastTierTotalAttestationUnitsOf(_tierId, _timestamp)
+                        IDefifaHook(_metadata.dataHook).getPastTierTotalAttestationUnitsOf(_tierId, _timestamp)
                     );
                 }
             }
@@ -307,7 +307,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // If there's a weight assigned to the tier, make sure there is a token backed by it.
         for (uint256 _i; _i < _numberOfTierWeights; _i++) {
-            if (_tierWeights[_i].cashOutWeight > 0 && IDefifaDelegate(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
+            if (_tierWeights[_i].cashOutWeight > 0 && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
                 revert UNOWNED_PROPOSED_CASHOUT_VALUE();
             }
         }
@@ -327,7 +327,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         _scorecard.gracePeriodEnds = uint48(block.timestamp + attestationGracePeriodOf(_gameId));
 
         // Keep a reference to the default attestation delegate.
-        address _defaultAttestationDelegate = IDefifaDelegate(_metadata.dataHook).defaultAttestationDelegate();
+        address _defaultAttestationDelegate = IDefifaHook(_metadata.dataHook).defaultAttestationDelegate();
 
         // If the scorecard is being sent from the default attestation delegate, store it.
         if (msg.sender == _defaultAttestationDelegate) {
@@ -422,13 +422,13 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (bytes memory)
     {
         // Build the calldata from the tier weights.
-        return abi.encodeWithSelector(DefifaDelegate.setTierCashOutWeightsTo.selector, (_tierWeights));
+        return abi.encodeWithSelector(DefifaHook.setTierCashOutWeightsTo.selector, (_tierWeights));
     }
 
     /// @notice A value representing the contents of a scorecard.
-    /// @param _gameDelegate The address where the game is being played.
+    /// @param _gameHook The address where the game is being played.
     /// @param _calldata The calldata that will be sent if the scorecard is ratified.
-    function _hashScorecardOf(address _gameDelegate, bytes memory _calldata) internal pure virtual returns (uint256) {
-        return uint256(keccak256(abi.encode(_gameDelegate, _calldata)));
+    function _hashScorecardOf(address _gameHook, bytes memory _calldata) internal pure virtual returns (uint256) {
+        return uint256(keccak256(abi.encode(_gameHook, _calldata)));
     }
 }

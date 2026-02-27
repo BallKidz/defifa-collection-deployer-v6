@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {DefifaLaunchProjectData} from "../structs/DefifaLaunchProjectData.sol";
 import {DefifaOpsData} from "../structs/DefifaOpsData.sol";
-import {IDefifaDelegate} from "./IDefifaDelegate.sol";
+import {IDefifaHook} from "./IDefifaHook.sol";
 import {IDefifaGovernor} from "./IDefifaGovernor.sol";
 
 import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
@@ -14,7 +14,7 @@ import {IJBAddressRegistry} from '@bananapus/address-registry-v5/src/interfaces/
 interface IDefifaDeployer {
     event LaunchGame(
         uint256 indexed gameId,
-        IDefifaDelegate indexed delegate,
+        IDefifaHook indexed hook,
         IDefifaGovernor indexed governor,
         IJB721TokenUriResolver tokenUriResolver,
         address caller
@@ -40,7 +40,7 @@ interface IDefifaDeployer {
 
     function baseProtocolProjectId() external view returns (uint256);
 
-    function delegateCodeOrigin() external view returns (address);
+    function hookCodeOrigin() external view returns (address);
 
     function tokenUriResolver() external view returns (IJB721TokenUriResolver);
 

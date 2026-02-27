@@ -5,12 +5,12 @@
 //
 // import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@openzeppelin/contracts/proxy/Clones.sol";
-// import "../DefifaDelegate.sol";
+// import "../DefifaHook.sol";
 // import "../DefifaDeployer.sol";
 // import "../DefifaTokenUriResolver.sol";
 // import "../interfaces/IDefifaGamePhaseReporter.sol";
 // import "../interfaces/IDefifaGamePhaseReporter.sol";
-// import "../interfaces/IDefifaDelegate.sol";
+// import "../interfaces/IDefifaHook.sol";
 //
 // // import {CapsulesTypeface} from "../lib/capsules/contracts/CapsulesTypeface.sol";
 //
@@ -59,9 +59,9 @@
 //     event K(bytes4 k);
 //
 //     function testWithTierImage() public {
-//         emit K(type(IDefifaDelegate).interfaceId);
-//         IDefifaDelegate _delegate =
-//             DefifaDelegate(Clones.clone(address(new DefifaDelegate(IERC20(address(0)), IERC20(address(0))))));
+//         emit K(type(IDefifaHook).interfaceId);
+//         IDefifaHook _hook =
+//             DefifaHook(Clones.clone(address(new DefifaHook(IERC20(address(0)), IERC20(address(0))))));
 //         IJB721TokenUriResolver _resolver = new DefifaTokenUriResolver(_typeface);
 //         IDefifaGamePhaseReporter _gamePhaseReporter = new GamePhaseReporter();
 //         IDefifaGamePotReporter _gamePotReporter = new GamePotReporter();
@@ -83,7 +83,7 @@
 //         string[] memory _tierNames = new string[](1);
 //         _tierNames[0] = "lakers win. no one scores over 40pts.";
 //
-//         _delegate.initialize({
+//         _hook.initialize({
 //             gameId: 12345,
 //             directory: _directory,
 //             name: "Example collection",
@@ -104,15 +104,15 @@
 //         string[] memory inputs = new string[](3);
 //         inputs[0] = "node";
 //         inputs[1] = "./open.js";
-//         inputs[2] = _resolver.tokenUriOf(address(_delegate), 1000000001);
+//         inputs[2] = _resolver.tokenUriOf(address(_hook), 1000000001);
 //         bytes memory res = vm.ffi(inputs);
 //         res;
 //         vm.ffi(inputs);
 //     }
 //
 //     function testWithOutTierImage() public {
-//         IDefifaDelegate _delegate =
-//             DefifaDelegate(Clones.clone(address(new DefifaDelegate(IERC20(address(0)), IERC20(address(0))))));
+//         IDefifaHook _hook =
+//             DefifaHook(Clones.clone(address(new DefifaHook(IERC20(address(0)), IERC20(address(0))))));
 //         DefifaTokenUriResolver _resolver = new DefifaTokenUriResolver(_typeface);
 //         IDefifaGamePhaseReporter _gamePhaseReporter = new GamePhaseReporter();
 //         IDefifaGamePotReporter _gamePotReporter = new GamePotReporter();
@@ -135,7 +135,7 @@
 //         string[] memory _tierNames = new string[](1);
 //         _tierNames[0] = "D in 4";
 //
-//         _delegate.initialize({
+//         _hook.initialize({
 //             gameId: 123,
 //             directory: _directory,
 //             name: "NBA Finals (1)",
@@ -156,7 +156,7 @@
 //         string[] memory inputs = new string[](3);
 //         inputs[0] = "node";
 //         inputs[1] = "./open.js";
-//         inputs[2] = _resolver.tokenUriOf(address(_delegate), 1000000000);
+//         inputs[2] = _resolver.tokenUriOf(address(_hook), 1000000000);
 //         bytes memory res = vm.ffi(inputs);
 //         res;
 //         vm.ffi(inputs);

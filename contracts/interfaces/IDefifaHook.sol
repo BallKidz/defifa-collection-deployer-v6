@@ -12,7 +12,7 @@ import {DefifaDelegation} from "./../structs/DefifaDelegation.sol";
 import {IDefifaGamePhaseReporter} from "./IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./IDefifaGamePotReporter.sol";
 
-interface IDefifaDelegate is IJB721Hook {
+interface IDefifaHook is IJB721Hook {
     event Mint(
         uint256 indexed tokenId,
         uint256 indexed tierId,

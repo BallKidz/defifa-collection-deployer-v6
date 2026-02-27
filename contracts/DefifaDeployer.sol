@@ -10,14 +10,14 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 import {IDefifaDeployer} from "./interfaces/IDefifaDeployer.sol";
-import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
+import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
 import {IDefifaGovernor} from "./interfaces/IDefifaGovernor.sol";
 import {DefifaLaunchProjectData} from "./structs/DefifaLaunchProjectData.sol";
 import {DefifaTierParams} from "./structs/DefifaTierParams.sol";
 import {DefifaOpsData} from "./structs/DefifaOpsData.sol";
-import {DefifaDelegate} from "./DefifaDelegate.sol";
+import {DefifaHook} from "./DefifaHook.sol";
 import {DefifaTokenUriResolver} from "./DefifaTokenUriResolver.sol";
 
 import {IJBToken} from '@bananapus/core-v5/src/interfaces/IJBToken.sol';
@@ -69,7 +69,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @notice The game's ops.
     mapping(uint256 => DefifaOpsData) internal _opsOf;
 
-    /// @notice This contract current nonce, used for the registry initialized at 1 since the first contract deployed is the delegate
+    /// @notice This contract current nonce, used for the registry initialized at 1 since the first contract deployed is the hook
     uint256 internal _nonce;
 
     /// @notice If each game has been set to no contest.
@@ -90,8 +90,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @notice The project ID that'll receive protocol fees as commitments are fulfilled.
     uint256 public immutable override baseProtocolProjectId;
 
-    /// @notice The original code for the Defifa delegate to base subsequent instances on.
-    address public immutable override delegateCodeOrigin;
+    /// @notice The original code for the Defifa hook to base subsequent instances on.
+    address public immutable override hookCodeOrigin;
 
     /// @notice The default Defifa token URI resolver.
     IJB721TokenUriResolver public immutable override tokenUriResolver;
@@ -102,7 +102,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @notice The controller with which new projects should be deployed.
     IJBController public immutable override controller;
 
-    /// @notice The delegates registry.
+    /// @notice The hooks registry.
     IJBAddressRegistry public immutable registry;
 
     //*********************************************************************//
@@ -206,7 +206,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         if (_currentRuleset.cycleNumber == 2 && _opsOf[_gameId].refundPeriodDuration != 0) {
             return DefifaGamePhase.REFUND;
         }
-        if (IDefifaDelegate(_metadata.dataHook).cashOutWeightIsSet()) return DefifaGamePhase.COMPLETE;
+        if (IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) return DefifaGamePhase.COMPLETE;
         return DefifaGamePhase.SCORING;
     }
 
@@ -214,15 +214,15 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // -------------------------- constructor ---------------------------- //
     //*********************************************************************//
 
-    /// @param _delegateCodeOrigin The code of the Defifa delegate.
+    /// @param _hookCodeOrigin The code of the Defifa hook.
     /// @param _tokenUriResolver The standard default token URI resolver.
     /// @param _governor The Defifa governor.
     /// @param _controller The controller to use to launch the game from.
-    /// @param _registry The contract storing references to the deployer of each delegate.
+    /// @param _registry The contract storing references to the deployer of each hook.
     /// @param _defifaProjectId The ID of the project that should take the fee from the games.
     /// @param _baseProtocolProjectId The ID of the protocol project that'll receive fees from fulfilling commitments.
     constructor(
-        address _delegateCodeOrigin,
+        address _hookCodeOrigin,
         IJB721TokenUriResolver _tokenUriResolver,
         IDefifaGovernor _governor,
         IJBController _controller,
@@ -230,7 +230,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _defifaProjectId,
         uint256 _baseProtocolProjectId
     ) {
-        delegateCodeOrigin = _delegateCodeOrigin;
+        hookCodeOrigin = _hookCodeOrigin;
         tokenUriResolver = _tokenUriResolver;
         governor = _governor;
         controller = _controller;
@@ -244,7 +244,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
 
-    /// @notice Launches a new game owned by this contract with a DefifaDelegate attached.
+    /// @notice Launches a new game owned by this contract with a DefifaHook attached.
     /// @param _launchProjectData Data necessary to fulfill the transaction to launch a game.
     /// @return gameId The ID of the newly configured game.
     function launchGameWith(DefifaLaunchProjectData memory _launchProjectData)
@@ -326,7 +326,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _numberOfTiers = _launchProjectData.tiers.length;
 
         // Create the standard tiers struct that will be populated from the defifa tiers.
-        JB721TierConfig[] memory _delegateTiers = new JB721TierConfig[](
+        JB721TierConfig[] memory _hookTiers = new JB721TierConfig[](
           _launchProjectData.tiers.length
         );
 
@@ -336,12 +336,12 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // Keep a reference to the tier being iterated on.
         DefifaTierParams memory _defifaTier;
 
-        // Create the delegate tiers from the Defifa tiers.
+        // Create the hook tiers from the Defifa tiers.
         for (uint256 _i; _i < _numberOfTiers;) {
             _defifaTier = _launchProjectData.tiers[_i];
 
             // Set the tier.
-            _delegateTiers[_i] = JB721TierConfig({
+            _hookTiers[_i] = JB721TierConfig({
                 price: _defifaTier.price,
                 initialSupply: 999_999_999, // The max allowed value.
                 votingUnits: 1,
@@ -366,14 +366,14 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             }
         }
 
-        // Clone and initialize the new delegate with a new token uri resolver.
-        DefifaDelegate _delegate = DefifaDelegate(Clones.clone(delegateCodeOrigin));
+        // Clone and initialize the new hook with a new token uri resolver.
+        DefifaHook _hook = DefifaHook(Clones.clone(hookCodeOrigin));
 
         // Use the default uri resolver if provided, else use the hardcoded generic default.
         IJB721TokenUriResolver _uriResolver = _launchProjectData.defaultTokenUriResolver
             != IJB721TokenUriResolver(address(0)) ? _launchProjectData.defaultTokenUriResolver : tokenUriResolver;
 
-        _delegate.initialize({
+        _hook.initialize({
             _gameId: gameId,
             _name: _launchProjectData.name,
             _symbol: string.concat("DEFIFA #", gameId.toString()),
@@ -381,7 +381,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             _baseUri: _launchProjectData.baseUri,
             _tokenUriResolver: _uriResolver,
             _contractUri: _launchProjectData.contractUri,
-            _tiers: _delegateTiers,
+            _tiers: _hookTiers,
             _currency: _launchProjectData.token.currency,
             _store: _launchProjectData.store,
             _gamePhaseReporter: this,
@@ -391,7 +391,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
         
         // Launch the Juicebox project, and sanity check our gameId.
-        assert(gameId == _launchGame(_launchProjectData, gameId, address(_delegate)));
+        assert(gameId == _launchGame(_launchProjectData, gameId, address(_hook)));
 
         // Clone and initialize the new governor.
         governor.initializeGame({
@@ -401,12 +401,12 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
 
         // Transfer ownership to the specified owner.
-        _delegate.transferOwnership(address(governor));
+        _hook.transferOwnership(address(governor));
 
-        // Add the delegate to the registry, contract nonce starts at 1
+        // Add the hook to the registry, contract nonce starts at 1
         registry.registerAddress(address(this), ++_nonce);
 
-        emit LaunchGame(gameId, _delegate, governor, _uriResolver, msg.sender);
+        emit LaunchGame(gameId, _hook, governor, _uriResolver, msg.sender);
     }
 
     /// @notice Fulfill split amounts between all splits for a game.
@@ -422,7 +422,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             controller.currentRulesetOf(_gameId);
 
         // Make sure the game's commitments can be fulfilled.
-        if (!IDefifaDelegate(_metadata.dataHook).cashOutWeightIsSet()) {
+        if (!IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) {
             revert CANT_FULFILL_YET();
         }
         
@@ -503,7 +503,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // ------------------------ internal functions ----------------------- //
     //*********************************************************************//
 
-    function _launchGame(DefifaLaunchProjectData memory _launchProjectData, uint256 _gameId, address _dataSource) internal returns (uint256 projectId) {
+    function _launchGame(DefifaLaunchProjectData memory _launchProjectData, uint256 _gameId, address _dataHook) internal returns (uint256 projectId) {
         // 
         JBAccountingContext[] memory accountingContexts = new JBAccountingContext[](1);
         accountingContexts[0] = _launchProjectData.token;
@@ -544,7 +544,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 useTotalSurplusForCashOuts: false,
                 useDataHookForPay: true,
                 useDataHookForCashOut: true,
-                dataHook: _dataSource,
+                dataHook: _dataHook,
                 metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
                     JB721TiersRulesetMetadata({
                     pauseTransfers: false,
@@ -585,7 +585,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                     useTotalSurplusForCashOuts: false,
                     useDataHookForPay: true,
                     useDataHookForCashOut: true,
-                    dataHook: _dataSource,
+                    dataHook: _dataHook,
                     metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
                         JB721TiersRulesetMetadata({
                         pauseTransfers: false,
@@ -641,7 +641,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 useTotalSurplusForCashOuts: false,
                 useDataHookForPay: true,
                 useDataHookForCashOut: true,
-                dataHook: _dataSource,
+                dataHook: _dataHook,
                 metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
                     JB721TiersRulesetMetadata({
                     pauseTransfers: false,
@@ -649,7 +649,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 })
                 ))
             }),
-            splitGroups: _buildSplits(_gameId, _dataSource, _launchProjectData.token.token, _launchProjectData.splits),
+            splitGroups: _buildSplits(_gameId, _dataHook, _launchProjectData.token.token, _launchProjectData.splits),
             fundAccessLimitGroups: fundAccessConstraints 
         });
 
@@ -663,7 +663,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
     }
 
-    function _buildSplits(uint256 _gameId, address _datasource, address _token, JBSplit[] memory _initialSplits) internal view returns (JBSplitGroup[] memory) {
+    function _buildSplits(uint256 _gameId, address _dataHook, address _token, JBSplit[] memory _initialSplits) internal view returns (JBSplitGroup[] memory) {
         uint256 _numberOfSplits = _initialSplits.length;
         uint256 _totalPercent;
 
@@ -681,8 +681,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             preferAddToBalance: false,
             percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor),
             projectId: uint64(baseProtocolProjectId),
-            // Have the fee be paid directly to the datasource of the project.
-            beneficiary: payable(address(_datasource)),
+            // Have the fee be paid directly to the data hook of the project.
+            beneficiary: payable(address(_dataHook)),
             lockedUntil: 0,
             hook: IJBSplitHook(address(0))
         });
@@ -693,8 +693,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             preferAddToBalance: false,
             percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
             projectId: uint64(defifaProjectId),
-            // Have the fee be paid directly to the datasource of the project.
-            beneficiary: payable(address(_datasource)),
+            // Have the fee be paid directly to the data hook of the project.
+            beneficiary: payable(address(_dataHook)),
             lockedUntil: 0,
             hook: IJBSplitHook(address(0))
         });

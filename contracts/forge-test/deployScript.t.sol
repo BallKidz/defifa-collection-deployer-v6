@@ -78,8 +78,8 @@ pragma solidity ^0.8.16;
 //       transfersPausable: true
 //     });
 
-//     DefifaDelegateData memory _delegateData =
-//       DefifaDelegateData({
+//     DefifaHookData memory _delegateData =
+//       DefifaHookData({
 //         name: 'Defifa: FIFA World Cup 2022',
 //         symbol: 'DEFIFA',
 //         // TODO: Need a base URI.
@@ -108,11 +108,11 @@ pragma solidity ^0.8.16;
 //         terminal: terminal
 //       });
 
-//     // Deploy the codeOrigin for the delegate
-//     DefifaDelegate _defifaDelegateCodeOrigin = new DefifaDelegate();
+//     // Deploy the codeOrigin for the hook
+//     DefifaHook _defifaHookCodeOrigin = new DefifaHook();
 
 //     // Deploy the deployer.
-//     defifaDeployer = new DefifaDeployer(address(_defifaDelegateCodeOrigin), controller, JBTokens.ETH);
+//     defifaDeployer = new DefifaDeployer(address(_defifaHookCodeOrigin), controller, JBTokens.ETH);
 
 //     uint256[] memory _permissionIndexes = new uint256[](1);
 //     _permissionIndexes[0] = JBOperations.SET_SPLITS;
@@ -129,12 +129,12 @@ pragma solidity ^0.8.16;
 //     uint256 _projectId = defifaDeployer.launchGameWith(_delegateData, _launchProjectData);
 //     // initialNonce + 1
 
-//     // Get a reference to the latest configured funding cycle's data source, which should be the delegate that was deployed and attached to the project.
+//     // Get a reference to the latest configured funding cycle's data source, which should be the hook that was deployed and attached to the project.
 //     (, JBFundingCycleMetadata memory _metadata,) = controller.latestConfiguredFundingCycleOf(_projectId);
 //     // initialNonce + 1 (view function)
 
 //     // Deploy the governor
-//     defifaGovernor = new DefifaGovernor(DefifaDelegate(_metadata.dataSource), 0);
+//     defifaGovernor = new DefifaGovernor(DefifaHook(_metadata.dataSource), 0);
 
 //     console.log(address(defifaDeployer));
 //     console.log(address(store));
