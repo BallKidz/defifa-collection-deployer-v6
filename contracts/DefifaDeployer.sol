@@ -426,8 +426,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     function fulfillCommitmentsOf(uint256 _gameId) external virtual override {
         // Make sure commitments haven't already been fulfilled.
         if (fulfilledCommitmentsOf[_gameId] != 0) return;
-        // Set the fulfilled commitments to 1 to prevent re-entrance.
-        fulfilledCommitmentsOf[_gameId] = 1;
 
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) =
@@ -437,16 +435,17 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         if (!IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) {
             revert CANT_FULFILL_YET();
         }
-        
+
         // Get the game token and the terminal.
         address _token = _opsOf[_gameId].token;
         IJBMultiTerminal _terminal = IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf(_gameId, _token)));
 
-        // Get the current pot.
+        // Get the current pot and store it. This also prevents re-entrance since the check above will return early.
         uint256 _pot = _terminal.STORE().balanceOf(
             address(_terminal), _gameId, _token
         );
-        
+        fulfilledCommitmentsOf[_gameId] = _pot;
+
         // Send the payout to pay all the fees for this game.
         _terminal.sendPayoutsOf({
             projectId: _gameId,
@@ -498,9 +497,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         
         // Update the ruleset to the final one.
         controller.queueRulesetsOf(_gameId, rulesetConfigs, 'Defifa game has finished.');
-
-        // Update the fulfilled commitments to the actual pot amount.
-        fulfilledCommitmentsOf[_gameId] = _pot;
 
         emit FulfilledCommitments({
             gameId: _gameId,
