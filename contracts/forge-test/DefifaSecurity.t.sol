@@ -84,12 +84,21 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
         _setupGame(32, 100 ether);
         _toScoring();
 
-        // Tier 1 gets 50%, rest split 50%
+        // Tier 1 gets 50%, rest split 50% — must sum to exactly TOTAL_CASHOUT_WEIGHT
         uint256 tw = _nft.TOTAL_CASHOUT_WEIGHT();
         DefifaTierCashOutWeight[] memory sc = _buildScorecard(32);
+        uint256 half = tw / 2;
+        uint256 perTier = half / 31;
         uint256 assigned;
         for (uint256 i; i < 32; i++) {
-            sc[i].cashOutWeight = i == 0 ? tw / 2 : (tw / 2) / 31;
+            if (i == 0) {
+                sc[i].cashOutWeight = half;
+            } else if (i == 31) {
+                // Last tier absorbs rounding remainder
+                sc[i].cashOutWeight = tw - assigned;
+            } else {
+                sc[i].cashOutWeight = perTier;
+            }
             assigned += sc[i].cashOutWeight;
         }
 
@@ -97,9 +106,8 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
         uint256 pot = _surplus();
         uint256 out = _cashOutAllUsers();
 
-        uint256 dust = pot * (tw - assigned) / tw;
-        assertApproxEqAbs(out, pot - dust, 1e15, "cashed out vs pot");
-        assertApproxEqAbs(_surplus(), dust, 1e15, "remaining dust");
+        assertApproxEqAbs(out, pot, 1e15, "cashed out vs pot");
+        assertLe(_surplus(), 1e15, "remaining dust");
         // No fee tokens left in hook
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(_nft)), 0, "no NANA left");
         assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(address(_nft)), 0, "no DEFIFA left");
@@ -236,8 +244,15 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
         uint256 tw = _nft.TOTAL_CASHOUT_WEIGHT();
         uint256 wpt = tw / nTiers;
         DefifaTierCashOutWeight[] memory sc = _buildScorecard(nTiers);
+        uint256 assigned;
         for (uint256 i; i < nTiers; i++) {
-            sc[i].cashOutWeight = wpt;
+            if (i == nTiers - 1) {
+                // Last tier absorbs rounding remainder to satisfy exact weight requirement
+                sc[i].cashOutWeight = tw - assigned;
+            } else {
+                sc[i].cashOutWeight = wpt;
+            }
+            assigned += sc[i].cashOutWeight;
         }
 
         _attestAndRatify(sc);

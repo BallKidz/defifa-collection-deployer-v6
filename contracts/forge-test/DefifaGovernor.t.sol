@@ -452,7 +452,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Phase 2: Redeem
         vm.warp(block.timestamp + defifaData.mintPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
-        // Generate the scorecards
+        // Generate the scorecards — must sum to exactly TOTAL_CASHOUT_WEIGHT
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         uint256 assignedCashOutWeight;
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -461,6 +461,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             if (distribution.length <= i) continue;
             scorecards[i].cashOutWeight = (uint256(distribution[i]) * _nft.TOTAL_CASHOUT_WEIGHT()) / _sumDistribution;
             assignedCashOutWeight += scorecards[i].cashOutWeight;
+        }
+        // Absorb rounding remainder into first tier with weight
+        if (assignedCashOutWeight < _nft.TOTAL_CASHOUT_WEIGHT()) {
+            uint256 remainder = _nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight;
+            for (uint256 i = 0; i < scorecards.length; i++) {
+                if (scorecards[i].cashOutWeight > 0) {
+                    scorecards[i].cashOutWeight += remainder;
+                    break;
+                }
+            }
         }
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
@@ -749,6 +759,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
                 scorecards[i].cashOutWeight += (totalCashOutWeight * uint256(winningTierExtraWeight)) / totalWeight;
             }
             assignedCashOutWeight += scorecards[i].cashOutWeight;
+        }
+        // Absorb rounding remainder into first tier with weight
+        if (assignedCashOutWeight < totalCashOutWeight) {
+            uint256 remainder = totalCashOutWeight - assignedCashOutWeight;
+            for (uint256 i = 0; i < scorecards.length; i++) {
+                if (scorecards[i].cashOutWeight > 0) {
+                    scorecards[i].cashOutWeight += remainder;
+                    break;
+                }
+            }
         }
         {
             // Forward time so proposals can be created
@@ -1090,8 +1110,9 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward the amount of blocks needed to reach the end (and round up)
         vm.warp(block.timestamp + _governor.attestationGracePeriodOf(_gameId) + 1);
         
-        // This is the error we are looking for in this test, it should only trigger when cashOutWeight is more than the max, which should happen at > 10.
-        if (nTiers > 10){
+        // With exact-weight validation, only nTiers == 10 produces an exact sum.
+        // Any other count (under or over) triggers INVALID_CASHOUT_WEIGHTS.
+        if (nTiers != 10){
             vm.expectRevert(DefifaHook.INVALID_CASHOUT_WEIGHTS.selector);
         }
 
