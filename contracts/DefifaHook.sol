@@ -79,8 +79,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// @dev _tierId The ID of the tier to get a name for.
     mapping(uint256 => string) internal _tierNameOf;
     
-    /// @notice The cumulative price paid to mint tokens. Used as the denominator for fee token ($DEFIFA/$NANA) distribution.
-    /// @dev Reserved mints do not increment this — they dilute the treasury pot but not the fee token claims.
+    /// @notice The cumulative mint price of all tokens (paid and reserved). Used as the denominator for fee token ($DEFIFA/$NANA) distribution.
     uint256 internal _paidMintCost;
 
     //*********************************************************************//
@@ -555,9 +554,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Fetch the tier details (needed for votingUnits below).
         JB721Tier memory _tier = store.tierOf(address(this), _tierId, false);
 
-        // NOTE: _paidMintCost is intentionally NOT incremented here. Reserved tokens dilute the
-        // game's treasury (pot) for cash-outs — that's by design — but they should not receive a
-        // share of fee tokens ($DEFIFA/$NANA), which are distributed proportional to _paidMintCost.
+        // Increment _paidMintCost so reserved recipients can claim their share of fee tokens ($DEFIFA/$NANA).
+        _paidMintCost += _tier.price * _count;
 
         for (uint256 _i; _i < _count;) {
             // Set the token ID.
