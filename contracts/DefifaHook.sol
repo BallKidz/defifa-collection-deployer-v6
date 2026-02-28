@@ -80,7 +80,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     mapping(uint256 => string) internal _tierNameOf;
     
     /// @notice The cumulative mint price of all tokens (paid and reserved). Used as the denominator for fee token ($DEFIFA/$NANA) distribution.
-    uint256 internal _paidMintCost;
+    uint256 internal _totalMintCost;
 
     //*********************************************************************//
     // ---------------- public immutable stored properties --------------- //
@@ -407,13 +407,13 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         (uint256 _defifaTokenAllocation, uint256 _baseProtocolTokenAllocation) = tokenAllocations();
         
         // If nothing was paid to mint, no fee tokens can be claimed.
-        if (_paidMintCost == 0) {
+        if (_totalMintCost == 0) {
             return (0, 0);
         }
 
         // Calculate the user's claimable amount proportional to what they paid.
-        defifaTokenAmount = _defifaTokenAllocation * _cumulativeMintPrice / _paidMintCost;
-        baseProtocolTokenAmount = _baseProtocolTokenAllocation * _cumulativeMintPrice / _paidMintCost;
+        defifaTokenAmount = _defifaTokenAllocation * _cumulativeMintPrice / _totalMintCost;
+        baseProtocolTokenAmount = _baseProtocolTokenAllocation * _cumulativeMintPrice / _totalMintCost;
     }
 
     /// @notice Indicates if this contract adheres to the specified interface.
@@ -554,8 +554,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Fetch the tier details (needed for votingUnits below).
         JB721Tier memory _tier = store.tierOf(address(this), _tierId, false);
 
-        // Increment _paidMintCost so reserved recipients can claim their share of fee tokens ($DEFIFA/$NANA).
-        _paidMintCost += _tier.price * _count;
+        // Increment _totalMintCost so reserved recipients can claim their share of fee tokens ($DEFIFA/$NANA).
+        _totalMintCost += _tier.price * _count;
 
         for (uint256 _i; _i < _count;) {
             // Set the token ID.
@@ -717,7 +717,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             
             // Claim the $DEFIFA and $NANA tokens for the user.
             _beneficiaryReceivedTokens = _claimTokensFor(
-                context.holder, _cumulativeMintPrice, _paidMintCost
+                context.holder, _cumulativeMintPrice, _totalMintCost
             );
         }
 
@@ -725,7 +725,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         if (context.reclaimedAmount.value == 0 && !_beneficiaryReceivedTokens) revert NOTHING_TO_CLAIM();
 
         // Decrement the paid mint cost by the cumulative mint price of the tokens being burned.
-        _paidMintCost -= _cumulativeMintPrice;
+        _totalMintCost -= _cumulativeMintPrice;
     }
 
     /// @notice Mint reserved tokens within the tier for the provided value.
@@ -996,7 +996,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         uint256 _tokenId;
         
         // Increment the paid mint cost.
-        _paidMintCost += _amount;
+        _totalMintCost += _amount;
 
         // Loop through each token ID and mint.
         for (uint256 _i; _i < _mintsLength;) {
