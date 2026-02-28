@@ -308,7 +308,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Make sure the game is in its scoring phase.
         if (
-            IDefifaDelegate(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
                 != DefifaGamePhase.SCORING
         ) revert NOT_ALLOWED();
 
@@ -356,7 +356,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Make sure the game is in its scoring phase.
         if (
-            IDefifaDelegate(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
                 != DefifaGamePhase.SCORING
         ) revert NOT_ALLOWED();
 
