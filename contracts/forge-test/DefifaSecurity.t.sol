@@ -274,6 +274,131 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
     }
 
     // =========================================================================
+    // C-D3: reserved minters get proportional fee tokens ($DEFIFA/$NANA)
+    // =========================================================================
+    function testC_D3_reservedMintersGetFeeTokens() external {
+        // Setup: 2 tiers, reservedRate=1 (1 reserve per paid mint), reserveBeneficiary = _reserveAddr
+        address _reserveAddr = address(bytes20(keccak256("reserveBeneficiary")));
+
+        DefifaTierParams[] memory tp = new DefifaTierParams[](2);
+        for (uint256 i; i < 2; i++) {
+            tp[i] = DefifaTierParams({
+                price: uint80(1 ether),
+                reservedRate: 1, // 1 reserve per 1 paid mint
+                reservedTokenBeneficiary: _reserveAddr,
+                encodedIPFSUri: bytes32(0),
+                shouldUseReservedTokenBeneficiaryAsDefault: false,
+                name: "DEFIFA"
+            });
+        }
+        DefifaLaunchProjectData memory d = DefifaLaunchProjectData({
+            name: "DEFIFA", projectUri: "", contractUri: "", baseUri: "",
+            token: JBAccountingContext({token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: JBCurrencyIds.ETH}),
+            mintPeriodDuration: 1 days, start: uint48(block.timestamp + 3 days), refundPeriodDuration: 1 days,
+            store: new JB721TiersHookStore(), splits: new JBSplit[](0),
+            attestationStartTime: 0, attestationGracePeriod: 100381,
+            defaultAttestationDelegate: address(0), tiers: tp,
+            defaultTokenUriResolver: IJB721TokenUriResolver(address(0)), terminal: jbMultiTerminal()
+        });
+        (_pid, _nft, _gov) = _launch(d);
+        vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
+
+        // Paid mints: user0 mints tier 1, user1 mints tier 2
+        _users = new address[](2);
+        _users[0] = _addr(0);
+        _users[1] = _addr(1);
+        _mint(_users[0], 1, 1 ether);
+        _delegateSelf(_users[0], 1);
+        vm.warp(block.timestamp + 1);
+        _mint(_users[1], 2, 1 ether);
+        _delegateSelf(_users[1], 2);
+        vm.warp(block.timestamp + 1);
+
+        // Move to scoring phase (reserves can only be minted here)
+        _toScoring();
+
+        // Mint reserved tokens (1 per tier since reserveFrequency=1)
+        JB721TiersMintReservesConfig[] memory reserveConfigs = new JB721TiersMintReservesConfig[](2);
+        reserveConfigs[0] = JB721TiersMintReservesConfig({tierId: 1, count: 1});
+        reserveConfigs[1] = JB721TiersMintReservesConfig({tierId: 2, count: 1});
+        _nft.mintReservesFor(reserveConfigs);
+
+        // Reserve beneficiary should hold 2 NFTs (mintReservesFor auto-delegates to self)
+        assertEq(_nft.balanceOf(_reserveAddr), 2, "reserve beneficiary holds 2 NFTs");
+
+        // Seed fee tokens into the hook (simulating protocol fee distribution)
+        uint256 defifaAmount = 1000 ether;
+        uint256 nanaAmount = 500 ether;
+        deal(address(IERC20(_defifaProjectTokenAccount)), address(_nft), defifaAmount);
+        deal(address(IERC20(_protocolFeeProjectTokenAccount)), address(_nft), nanaAmount);
+
+        // Scorecard: equal weight
+        uint256 tw = _nft.TOTAL_CASHOUT_WEIGHT();
+        DefifaTierCashOutWeight[] memory sc = _buildScorecard(2);
+        sc[0].cashOutWeight = tw / 2;
+        sc[1].cashOutWeight = tw / 2;
+
+        // Need _reserveAddr to attest too
+        address[] memory allUsers = new address[](3);
+        allUsers[0] = _users[0];
+        allUsers[1] = _users[1];
+        allUsers[2] = _reserveAddr;
+
+        uint256 pid = _gov.submitScorecardFor(_gameId, sc);
+        vm.warp(block.timestamp + _gov.attestationStartTimeOf(_gameId) + 1);
+        for (uint256 i; i < allUsers.length; i++) {
+            vm.prank(allUsers[i]);
+            _gov.attestToScorecardFrom(_gameId, pid);
+        }
+        vm.warp(block.timestamp + _gov.attestationGracePeriodOf(_gameId) + 1);
+        _gov.ratifyScorecardFrom(_gameId, sc);
+        vm.warp(block.timestamp + 1);
+
+        // Cash out paid minters
+        _cashOut(_users[0], 1, 1);
+        _cashOut(_users[1], 2, 1);
+
+        // Check that paid minters got fee tokens
+        uint256 user0Defifa = IERC20(_defifaProjectTokenAccount).balanceOf(_users[0]);
+        uint256 user0Nana = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_users[0]);
+        assertGt(user0Defifa, 0, "paid minter got DEFIFA tokens");
+        assertGt(user0Nana, 0, "paid minter got NANA tokens");
+
+        // Cash out reserved minter (tier 1, token #2 and tier 2, token #2)
+        // Reserved tokens are the 2nd minted in each tier
+        bytes memory meta1 = _cashOutMeta(1, 2);
+        vm.prank(_reserveAddr);
+        JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
+            holder: _reserveAddr, projectId: _pid, cashOutCount: 0,
+            tokenToReclaim: JBConstants.NATIVE_TOKEN, minTokensReclaimed: 0,
+            beneficiary: payable(_reserveAddr), metadata: meta1
+        });
+
+        bytes memory meta2 = _cashOutMeta(2, 2);
+        vm.prank(_reserveAddr);
+        JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
+            holder: _reserveAddr, projectId: _pid, cashOutCount: 0,
+            tokenToReclaim: JBConstants.NATIVE_TOKEN, minTokensReclaimed: 0,
+            beneficiary: payable(_reserveAddr), metadata: meta2
+        });
+
+        // Reserved minter should have gotten fee tokens too
+        uint256 reserveDefifa = IERC20(_defifaProjectTokenAccount).balanceOf(_reserveAddr);
+        uint256 reserveNana = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_reserveAddr);
+        assertGt(reserveDefifa, 0, "reserved minter got DEFIFA tokens");
+        assertGt(reserveNana, 0, "reserved minter got NANA tokens");
+
+        // All 4 tokens had equal tier.price (1 ether), so each should get 25% of fee tokens
+        // (paid and reserved mints are treated equally in _totalMintCost)
+        assertApproxEqAbs(user0Defifa, reserveDefifa / 2, 1, "reserved gets 2x (2 tokens) vs paid (1 token)");
+        assertApproxEqAbs(user0Nana, reserveNana / 2, 1, "NANA distribution matches");
+
+        // All fee tokens distributed (none left in hook)
+        assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(address(_nft)), 0, "no DEFIFA left");
+        assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(_nft)), 0, "no NANA left");
+    }
+
+    // =========================================================================
     // GAME LIFECYCLE: cash-out before scorecard gives 0 ETH (weights = 0)
     // =========================================================================
     function testNoCashOut_beforeScorecard() external {
