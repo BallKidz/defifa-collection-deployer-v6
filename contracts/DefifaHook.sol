@@ -552,9 +552,13 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
         // Keep a reference to the token ID being iterated on.
         uint256 _tokenId;
-        
-        // Fetch the tier details.
+
+        // Fetch the tier details (needed for votingUnits below).
         JB721Tier memory _tier = store.tierOf(address(this), _tierId, false);
+
+        // NOTE: _totalMintCost is intentionally NOT incremented here. Reserved tokens dilute the
+        // game's treasury (pot) for cash-outs — that's by design — but they should not receive a
+        // share of fee tokens ($DEFIFA/$NANA), which are distributed proportional to _totalMintCost.
 
         for (uint256 _i; _i < _count;) {
             // Set the token ID.
