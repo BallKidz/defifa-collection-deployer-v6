@@ -710,10 +710,10 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         bool _beneficiaryReceivedTokens;
         if (_isComplete) {
             amountRedeemed += context.reclaimedAmount.value;
-            
+
             // Claim the $DEFIFA and $NANA tokens for the user.
             _beneficiaryReceivedTokens = _claimTokensFor(
-                context.holder, _cumulativeMintPrice, _totalMintCost 
+                context.holder, _cumulativeMintPrice, _totalMintCost
             );
         }
 

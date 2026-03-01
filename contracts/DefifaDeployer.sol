@@ -57,6 +57,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     error INVALID_FEE_PERCENT();
     error INVALID_GAME_CONFIGURATION();
     error INCORRECT_DECIMAL_AMOUNT();
+    error NOT_NO_CONTEST();
+    error NO_CONTEST_ALREADY_TRIGGERED();
     error TERMINAL_NOT_FOUND();
     error PHASE_ALREADY_QUEUED();
     error SPLITS_DONT_ADD_UP();
@@ -117,6 +119,10 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @notice The amount of commitments a game has fulfilled.
     /// @dev The ID of the game to check.
     mapping(uint256 => uint256) public override fulfilledCommitmentsOf;
+
+    /// @notice Whether the no-contest refund ruleset has been triggered for a game.
+    /// @dev Once triggered, the game stays in NO_CONTEST and refunds are enabled.
+    mapping(uint256 => bool) public noContestTriggeredFor;
 
     //*********************************************************************//
     // ------------------------- external views -------------------------- //
@@ -220,7 +226,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Check if the scorecard has been ratified (game is COMPLETE).
+        // This takes priority over all NO_CONTEST checks — a ratified scorecard is final.
         if (IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) return DefifaGamePhase.COMPLETE;
+
+        // If no-contest has already been triggered, stay in NO_CONTEST.
+        if (noContestTriggeredFor[_gameId]) return DefifaGamePhase.NO_CONTEST;
 
         // Get the game's ops data for the safety mechanism checks.
         DefifaOpsData memory _ops = _opsOf[_gameId];
@@ -526,6 +536,70 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             pot: _pot,
             caller: msg.sender
         });
+    }
+
+    /// @notice Triggers the no-contest refund mechanism for a game.
+    /// @dev Anyone can call this once the game is in the NO_CONTEST phase. This queues a new ruleset without
+    /// payout limits, making the surplus equal to the balance so users can cash out at their mint price.
+    /// @dev Analogous to fulfillCommitmentsOf for COMPLETE — must be called before NO_CONTEST cash-outs work.
+    /// @param _gameId The ID of the game to trigger no-contest for.
+    function triggerNoContestFor(uint256 _gameId) external override {
+        // Make sure the game is currently in NO_CONTEST phase.
+        if (currentGamePhaseOf(_gameId) != DefifaGamePhase.NO_CONTEST) {
+            revert NOT_NO_CONTEST();
+        }
+
+        // Make sure no-contest hasn't already been triggered.
+        if (noContestTriggeredFor[_gameId]) revert NO_CONTEST_ALREADY_TRIGGERED();
+
+        // Mark as triggered.
+        noContestTriggeredFor[_gameId] = true;
+
+        // Get the game's current ruleset metadata for the data hook address.
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+
+        // Queue a new ruleset without payout limits so surplus = balance, enabling refunds.
+        JBRulesetConfig[] memory rulesetConfigs = new JBRulesetConfig[](1);
+        rulesetConfigs[0] = JBRulesetConfig({
+            mustStartAtOrAfter: 0,
+            duration: 0,
+            weight: 0,
+            weightCutPercent: 0,
+            approvalHook: IJBRulesetApprovalHook(address(0)),
+            metadata: JBRulesetMetadata({
+                reservedPercent: 0,
+                cashOutTaxRate: 0,
+                baseCurrency: _metadata.baseCurrency,
+                pausePay: true,
+                pauseCreditTransfers: false,
+                allowOwnerMinting: false,
+                allowSetCustomToken: false,
+                allowTerminalMigration: false,
+                allowSetTerminals: false,
+                allowSetController: false,
+                allowAddAccountingContext: false,
+                allowAddPriceFeed: false,
+                ownerMustSendPayouts: true,
+                holdFees: false,
+                useTotalSurplusForCashOuts: false,
+                useDataHookForPay: true,
+                useDataHookForCashOut: true,
+                dataHook: _metadata.dataHook,
+                metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
+                    JB721TiersRulesetMetadata({
+                    pauseTransfers: false,
+                    pauseMintPendingReserves: false
+                })
+                ))
+            }),
+            splitGroups: new JBSplitGroup[](0),
+            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0)
+        });
+
+        // Queue the no-contest refund ruleset.
+        controller.queueRulesetsOf(_gameId, rulesetConfigs, 'Defifa game: no contest.');
+
+        emit QueuedNoContest(_gameId, msg.sender);
     }
 
     /// @notice Allows this contract to receive 721s.
