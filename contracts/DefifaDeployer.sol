@@ -111,10 +111,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
     /// @notice The divisor that describes the fee that should be taken.
     /// @dev This is equal to 100 divided by the fee percent.
-    uint256 public override baseProtocolFeeDivisor = 20;
-
-    /// @notice The divisor that describes the fee that should be taken.
-    /// @dev This is equal to 100 divided by the fee percent.
     uint256 public override defifaFeeDivisor = 20;
 
     /// @notice The amount of commitments a game has fulfilled.
@@ -667,7 +663,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _numberOfSplits = _initialSplits.length;
         uint256 _totalPercent;
 
-        JBSplit[] memory _splits = new JBSplit[](_initialSplits.length + 3);
+        // 2 extra splits: Defifa fee + leftover back to game.
+        // No explicit NANA split — the JB protocol fee (2.5%) already routes to project #1.
+        JBSplit[] memory _splits = new JBSplit[](_initialSplits.length + 2);
         // Copy the splits over.
         for (uint256 _i; _i < _numberOfSplits; _i++) {
             // Copy the split over.
@@ -676,20 +674,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             _totalPercent += _initialSplits[_i].percent;
         }
 
-        // Add a split for the NANA fee.
-        _splits[_numberOfSplits] = JBSplit({
-            preferAddToBalance: false,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor),
-            projectId: uint64(baseProtocolProjectId),
-            // Have the fee be paid directly to the data hook of the project.
-            beneficiary: payable(address(_dataHook)),
-            lockedUntil: 0,
-            hook: IJBSplitHook(address(0))
-        });
-        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor;
-
         // Add a split for the Defifa fee.
-        _splits[_numberOfSplits + 1] = JBSplit({
+        _splits[_numberOfSplits] = JBSplit({
             preferAddToBalance: false,
             percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
             projectId: uint64(defifaProjectId),
@@ -700,9 +686,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
 
         _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor;
-        
+
         // Add a split for the leftover percentage.
-        _splits[_numberOfSplits + 2] = JBSplit({
+        _splits[_numberOfSplits + 1] = JBSplit({
             preferAddToBalance: true,
             percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT - _totalPercent),
             projectId: uint64(_gameId),
