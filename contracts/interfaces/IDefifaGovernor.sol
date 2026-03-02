@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {DefifaScorecardState} from "../enums/DefifaScorecardState.sol";
 import {DefifaTierCashOutWeight} from "../structs/DefifaTierCashOutWeight.sol";
 import {IDefifaDelegate} from "./IDefifaDelegate.sol";
-import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
+import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
 
 interface IDefifaGovernor {
     event GameInitialized(

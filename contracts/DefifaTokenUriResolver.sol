@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.16;
 
-import "lib/base64/base64.sol";
-import "@prb/math/src/Common.sol";
+import {Base64} from "lib/base64/base64.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
@@ -11,11 +11,11 @@ import {IDefifaTokenUriResolver} from "./interfaces/IDefifaTokenUriResolver.sol"
 import {DefifaFontImporter} from "./libraries/DefifaFontImporter.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 
-import {JBConstants} from '@bananapus/core-v5/src/libraries/JBConstants.sol';
-import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
-import {ERC721} from '@bananapus/721-hook-v5/src/abstract/ERC721.sol';
-import {JB721Tier} from '@bananapus/721-hook-v5/src/structs/JB721Tier.sol';
-import {JBIpfsDecoder} from '@bananapus/721-hook-v5/src/libraries/JBIpfsDecoder.sol';
+import {JBConstants} from "@bananapus/core-v5/src/libraries/JBConstants.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol";
+import {ERC721} from "@bananapus/721-hook-v5/src/abstract/ERC721.sol";
+import {JB721Tier} from "@bananapus/721-hook-v5/src/structs/JB721Tier.sol";
+import {JBIpfsDecoder} from "@bananapus/721-hook-v5/src/libraries/JBIpfsDecoder.sol";
 
 /// @title DefifaTokenUriResolver
 /// @notice Standard Token URIs for Defifa games.

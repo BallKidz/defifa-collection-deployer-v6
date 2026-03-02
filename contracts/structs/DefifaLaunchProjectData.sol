@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {DefifaTierParams} from './DefifaTierParams.sol';
-import {DefifaOpsData} from './DefifaOpsData.sol';
+import {DefifaTierParams} from "./DefifaTierParams.sol";
+import {DefifaOpsData} from "./DefifaOpsData.sol";
 
-import {JBLaunchProjectConfig} from '@bananapus/721-hook-v5/src/structs/JBLaunchProjectConfig.sol';
-import {JBAccountingContext} from '@bananapus/core-v5/src/structs/JBAccountingContext.sol';
-import {IJB721TiersHookStore} from '@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol';
-import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
-import {IJBTerminal} from '@bananapus/core-v5/src/interfaces/IJBTerminal.sol';
-import {JBSplit} from '@bananapus/core-v5/src/structs/JBSplit.sol';
+import {JBLaunchProjectConfig} from "@bananapus/721-hook-v5/src/structs/JBLaunchProjectConfig.sol";
+import {JBAccountingContext} from "@bananapus/core-v5/src/structs/JBAccountingContext.sol";
+import {IJB721TiersHookStore} from "@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol";
+import {IJBTerminal} from "@bananapus/core-v5/src/interfaces/IJBTerminal.sol";
+import {JBSplit} from "@bananapus/core-v5/src/structs/JBSplit.sol";
 
 /// @custom:member name The name of the game being created.
 /// @custom:member projectUri Metadata to associate with the project.
