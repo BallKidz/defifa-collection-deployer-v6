@@ -113,9 +113,16 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @dev This is equal to 100 divided by the fee percent.
     uint256 public override defifaFeeDivisor = 20;
 
+    /// @notice The divisor for the base protocol fee split.
+    /// @dev 40 = 2.5% (SPLITS_TOTAL_PERCENT / 40).
+    uint256 public override baseProtocolFeeDivisor = 40;
+
     /// @notice The amount of commitments a game has fulfilled.
     /// @dev The ID of the game to check.
     mapping(uint256 => uint256) public override fulfilledCommitmentsOf;
+
+    /// @notice The total absolute split percent for each game (out of SPLITS_TOTAL_PERCENT).
+    mapping(uint256 => uint256) internal _commitmentPercentOf;
 
     //*********************************************************************//
     // ------------------------- external views -------------------------- //
@@ -430,14 +437,21 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _pot = _terminal.STORE().balanceOf(
             address(_terminal), _gameId, _token
         );
-        
-        // Send the payout to pay all the fees for this game.
+
+        // Compute the fee amount based on the total absolute split percent stored at game creation.
+        uint256 _feeAmount = mulDiv(_pot, _commitmentPercentOf[_gameId], JBConstants.SPLITS_TOTAL_PERCENT);
+
+        // Store the actual fee amount for accurate currentGamePotOf reporting.
+        // Use max(feeAmount, 1) to preserve the reentrancy guard when pot is 0.
+        fulfilledCommitmentsOf[_gameId] = _feeAmount > 0 ? _feeAmount : 1;
+
+        // Send only the fee portion as payouts. The remaining balance stays as surplus for cash-outs.
         _terminal.sendPayoutsOf({
             projectId: _gameId,
             token: _token,
-            amount: _pot,
+            amount: _feeAmount,
             currency: _token == JBConstants.NATIVE_TOKEN ? _metadata.baseCurrency : uint32(uint160(_token)),
-            minTokensPaidOut: _pot
+            minTokensPaidOut: _feeAmount
         });
 
         // Queue the final ruleset.
@@ -485,7 +499,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         emit FulfilledCommitments({
             gameId: _gameId,
-            pot: _pot,
+            pot: _feeAmount,
             caller: msg.sender
         });
     }
@@ -659,44 +673,60 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
     }
 
-    function _buildSplits(uint256 _gameId, address _dataHook, address _token, JBSplit[] memory _initialSplits) internal view returns (JBSplitGroup[] memory) {
-        uint256 _numberOfSplits = _initialSplits.length;
-        uint256 _totalPercent;
+    function _buildSplits(uint256 _gameId, address _dataHook, address _token, JBSplit[] memory _initialSplits) internal returns (JBSplitGroup[] memory) {
+        uint256 _numberOfUserSplits = _initialSplits.length;
 
-        // 2 extra splits: Defifa fee + leftover back to game.
-        // No explicit NANA split — the JB protocol fee (2.5%) already routes to project #1.
-        JBSplit[] memory _splits = new JBSplit[](_initialSplits.length + 2);
-        // Copy the splits over.
-        for (uint256 _i; _i < _numberOfSplits; _i++) {
-            // Copy the split over.
-            _splits[_i] = _initialSplits[_i];
-            // Track the total percentage.
-            _totalPercent += _initialSplits[_i].percent;
+        // Compute absolute percents for protocol fees.
+        uint256 _nanaAbsolutePercent = JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor;
+        uint256 _defifaAbsolutePercent = JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor;
+
+        // Sum all absolute percents.
+        uint256 _totalAbsolutePercent = _nanaAbsolutePercent + _defifaAbsolutePercent;
+        for (uint256 _i; _i < _numberOfUserSplits; _i++) {
+            _totalAbsolutePercent += _initialSplits[_i].percent;
         }
 
-        // Add a split for the Defifa fee.
-        _splits[_numberOfSplits] = JBSplit({
+        // Validate that total fee splits don't exceed 100%.
+        if (_totalAbsolutePercent > JBConstants.SPLITS_TOTAL_PERCENT) revert SPLITS_DONT_ADD_UP();
+
+        // Store the total absolute percent for use in fulfillCommitmentsOf.
+        _commitmentPercentOf[_gameId] = _totalAbsolutePercent;
+
+        // Build the splits array: user splits + Defifa + NANA (NANA last to absorb rounding).
+        uint256 _splitCount = _numberOfUserSplits + 2;
+        JBSplit[] memory _splits = new JBSplit[](_splitCount);
+
+        // Normalize user splits and copy them over.
+        uint256 _normalizedTotal;
+        for (uint256 _i; _i < _numberOfUserSplits; _i++) {
+            _splits[_i] = _initialSplits[_i];
+            _splits[_i].percent = uint32(mulDiv(_initialSplits[_i].percent, JBConstants.SPLITS_TOTAL_PERCENT, _totalAbsolutePercent));
+            _normalizedTotal += _splits[_i].percent;
+        }
+
+        // Add Defifa fee split (normalized).
+        uint256 _defifaNormalized = mulDiv(_defifaAbsolutePercent, JBConstants.SPLITS_TOTAL_PERCENT, _totalAbsolutePercent);
+        _splits[_numberOfUserSplits] = JBSplit({
             preferAddToBalance: false,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
+            percent: uint32(_defifaNormalized),
             projectId: uint64(defifaProjectId),
-            // Have the fee be paid directly to the data hook of the project.
+            beneficiary: payable(address(_dataHook)),
+            lockedUntil: 0,
+            hook: IJBSplitHook(address(0))
+        });
+        _normalizedTotal += _defifaNormalized;
+
+        // Add NANA protocol fee split last — absorbs rounding remainder.
+        // Beneficiary is the data hook so the hook receives NANA tokens for distribution during cash-outs.
+        _splits[_splitCount - 1] = JBSplit({
+            preferAddToBalance: false,
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT - _normalizedTotal),
+            projectId: uint64(baseProtocolProjectId),
             beneficiary: payable(address(_dataHook)),
             lockedUntil: 0,
             hook: IJBSplitHook(address(0))
         });
 
-        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor;
-
-        // Add a split for the leftover percentage.
-        _splits[_numberOfSplits + 1] = JBSplit({
-            preferAddToBalance: true,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT - _totalPercent),
-            projectId: uint64(_gameId),
-            beneficiary: payable(address(0)),
-            lockedUntil: 0,
-            hook: IJBSplitHook(address(0))
-        });
-        
         // Build the grouped split for the payment of the game token.
         JBSplitGroup[] memory _groupedSplits = new JBSplitGroup[](1);
         _groupedSplits[0] = JBSplitGroup({groupId: uint256(uint160(_token)), splits: _splits});

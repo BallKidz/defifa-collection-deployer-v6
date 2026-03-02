@@ -52,6 +52,8 @@ interface IDefifaDeployer {
 
     function defifaFeeDivisor() external view returns (uint256);
 
+    function baseProtocolFeeDivisor() external view returns (uint256);
+
     function timesFor(uint256 _gameId) external view returns (uint48, uint24, uint24);
 
     function tokenOf(uint256 _gameId) external view returns (address);
