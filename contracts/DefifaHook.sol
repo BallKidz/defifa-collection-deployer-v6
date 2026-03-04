@@ -815,9 +815,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         (bool found, bytes memory metadata) =
             JBMetadataResolver.getDataFor(JBMetadataResolver.getId("pay", codeOrigin), context.payerMetadata);
 
-        if (!found) {
-           return;
-        }
+        if (!found) revert NOTHING_TO_MINT();
 
         // Decode the metadata.
         (address _attestationDelegate, uint16[] memory _tierIdsToMint ) = abi.decode(metadata, (address, uint16[]));
