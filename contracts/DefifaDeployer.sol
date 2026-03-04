@@ -165,7 +165,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // Get the current balance.
         uint256 _pot = IJBMultiTerminal(address(_terminal)).STORE().balanceOf(
-            address(_terminal), _gameId, JBConstants.NATIVE_TOKEN
+            address(_terminal), _gameId, _token
         );
 
         // Add any fulfilled commitments.
