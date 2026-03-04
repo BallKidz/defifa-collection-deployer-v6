@@ -320,8 +320,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 JBSplitGroup[] memory _groupedSplits = new JBSplitGroup[](1);
                 _groupedSplits[0] = JBSplitGroup({groupId: splitGroup, splits: _splits});
 
-                // This contract must have SET_SPLITS (index 18) operator permissions.
-                controller.SPLITS().setSplitGroupsOf(defifaProjectId, gameId, _groupedSplits);
+                // This contract must have SET_SPLIT_GROUPS permission from the defifa project owner.
+                controller.setSplitGroupsOf(defifaProjectId, gameId, _groupedSplits);
             }
         }
 
