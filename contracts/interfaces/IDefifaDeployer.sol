@@ -58,6 +58,8 @@ interface IDefifaDeployer {
 
     function tokenOf(uint256 _gameId) external view returns (address);
 
+    function safetyParamsOf(uint256 _gameId) external view returns (uint256 minParticipation, uint32 scorecardTimeout);
+
     function nextPhaseNeedsQueueing(uint256 _gameId) external view returns (bool);
 
     function launchGameWith(DefifaLaunchProjectData calldata _launchProjectData) external returns (uint256 gameId);
@@ -65,4 +67,6 @@ interface IDefifaDeployer {
     // function queueNextPhaseOf(uint256 _projectId) external returns (uint256 configuration);
 
     function fulfillCommitmentsOf(uint256 _gameId) external;
+
+    function triggerNoContestFor(uint256 _gameId) external;
 }
