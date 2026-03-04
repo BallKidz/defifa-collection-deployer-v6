@@ -414,7 +414,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward the amount of blocks needed to reach the end (and round up)
         vm.warp(block.timestamp+ _governor.attestationGracePeriodOf(_gameId) + 1);
         // Execute the proposal
-        vm.expectRevert(DefifaGovernor.NOT_ALLOWED.selector);
+        vm.expectRevert(DefifaGovernor.DefifaGovernor_NotAllowed.selector);
         _governor.ratifyScorecardFrom(_gameId, scorecards);
     }
 
@@ -691,7 +691,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         //deployer.queueNextPhaseOf(_projectId);
 
         vm.prank(_users[0]);
-        vm.expectRevert(abi.encodeWithSignature("DELEGATE_CHANGES_UNAVAILABLE_IN_THIS_PHASE()"));
+        vm.expectRevert(abi.encodeWithSignature("DefifaHook_DelegateChangesUnavailableInThisPhase()"));
         _nft.setTierDelegateTo(_users[1], 1);
     }
 
@@ -947,7 +947,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             scorecards[i].cashOutWeight = i % 2 == 0 ? 1_000_000_000 / (scorecards.length / 2) : 0;
         }
 
-        vm.expectRevert(abi.encodeWithSignature("UNOWNED_PROPOSED_CASHOUT_VALUE()"));
+        vm.expectRevert(abi.encodeWithSignature("DefifaGovernor_UnownedProposedCashoutValue()"));
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
     }
@@ -1044,7 +1044,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             _governor.attestToScorecardFrom(_gameId, _proposalId);
         }
         // Execute the proposal — should fail because grace period hasn't ended
-        vm.expectRevert(DefifaGovernor.NOT_ALLOWED.selector);
+        vm.expectRevert(DefifaGovernor.DefifaGovernor_NotAllowed.selector);
         _governor.ratifyScorecardFrom(_gameId, scorecards);
     }
 
@@ -1118,7 +1118,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // With exact-weight validation, only nTiers == 10 produces an exact sum.
         // Any other count (under or over) triggers INVALID_CASHOUT_WEIGHTS.
         if (nTiers != 10){
-            vm.expectRevert(DefifaHook.INVALID_CASHOUT_WEIGHTS.selector);
+            vm.expectRevert(DefifaHook.DefifaHook_InvalidCashoutWeights.selector);
         }
 
         // Execute the proposal

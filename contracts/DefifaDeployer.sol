@@ -52,18 +52,18 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
 
-    error CANT_FULFILL_YET();
-    error NOTHING_TO_FULFILL();
-    error GAME_OVER();
-    error INVALID_FEE_PERCENT();
-    error INVALID_GAME_CONFIGURATION();
-    error INCORRECT_DECIMAL_AMOUNT();
-    error NOT_NO_CONTEST();
-    error NO_CONTEST_ALREADY_TRIGGERED();
-    error TERMINAL_NOT_FOUND();
-    error PHASE_ALREADY_QUEUED();
-    error SPLITS_DONT_ADD_UP();
-    error UNEXPECTED_TERMINAL_CURRENCY();
+    error DefifaDeployer_CantFulfillYet();
+    error DefifaDeployer_NothingToFulfill();
+    error DefifaDeployer_GameOver();
+    error DefifaDeployer_InvalidFeePercent();
+    error DefifaDeployer_InvalidGameConfiguration();
+    error DefifaDeployer_IncorrectDecimalAmount();
+    error DefifaDeployer_NotNoContest();
+    error DefifaDeployer_NoContestAlreadyTriggered();
+    error DefifaDeployer_TerminalNotFound();
+    error DefifaDeployer_PhaseAlreadyQueued();
+    error DefifaDeployer_SplitsDontAddUp();
+    error DefifaDeployer_UnexpectedTerminalCurrency();
 
     //*********************************************************************//
     // ----------------------- internal properties ----------------------- //
@@ -318,7 +318,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             _launchProjectData.mintPeriodDuration == 0
                 || _launchProjectData.start
                     < block.timestamp + _launchProjectData.refundPeriodDuration + _launchProjectData.mintPeriodDuration
-        ) revert INVALID_GAME_CONFIGURATION();
+        ) revert DefifaDeployer_InvalidGameConfiguration();
 
         // Get the game ID, optimistically knowing it will be one greater than the current count.
         gameId = controller.PROJECTS().count() + 1;
@@ -454,7 +454,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _actualGameId = _launchGame(_launchProjectData, gameId, address(_hook));
 
         // Revert if the game ID does not match (e.g. front-run by another project creation).
-        if (gameId != _actualGameId) revert INVALID_GAME_CONFIGURATION();
+        if (gameId != _actualGameId) revert DefifaDeployer_InvalidGameConfiguration();
 
         // Clone and initialize the new governor.
         governor.initializeGame({
@@ -484,7 +484,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // Make sure the game's commitments can be fulfilled.
         if (!IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) {
-            revert CANT_FULFILL_YET();
+            revert DefifaDeployer_CantFulfillYet();
         }
 
         // Get the game token and the terminal.
@@ -495,7 +495,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _pot = _terminal.STORE().balanceOf(
             address(_terminal), _gameId, _token
         );
-        if (_pot == 0) revert NOTHING_TO_FULFILL();
+        if (_pot == 0) revert DefifaDeployer_NothingToFulfill();
 
         // Compute the fee amount based on the total absolute split percent stored at game creation.
         uint256 _feeAmount = mulDiv(_pot, _commitmentPercentOf[_gameId], JBConstants.SPLITS_TOTAL_PERCENT);
@@ -571,11 +571,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     function triggerNoContestFor(uint256 _gameId) external override {
         // Make sure the game is currently in NO_CONTEST phase.
         if (currentGamePhaseOf(_gameId) != DefifaGamePhase.NO_CONTEST) {
-            revert NOT_NO_CONTEST();
+            revert DefifaDeployer_NotNoContest();
         }
 
         // Make sure no-contest hasn't already been triggered.
-        if (noContestTriggeredFor[_gameId]) revert NO_CONTEST_ALREADY_TRIGGERED();
+        if (noContestTriggeredFor[_gameId]) revert DefifaDeployer_NoContestAlreadyTriggered();
 
         // Mark as triggered.
         noContestTriggeredFor[_gameId] = true;
@@ -810,7 +810,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Validate that total fee splits don't exceed 100%.
-        if (_totalAbsolutePercent > JBConstants.SPLITS_TOTAL_PERCENT) revert SPLITS_DONT_ADD_UP();
+        if (_totalAbsolutePercent > JBConstants.SPLITS_TOTAL_PERCENT) revert DefifaDeployer_SplitsDontAddUp();
 
         // Store the total absolute percent for use in fulfillCommitmentsOf.
         _commitmentPercentOf[_gameId] = _totalAbsolutePercent;

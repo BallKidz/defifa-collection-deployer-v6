@@ -339,7 +339,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
         assertEq(uint256(deployer.currentGamePhaseOf(_pid)), uint256(DefifaGamePhase.NO_CONTEST));
 
         // Attempting to ratify should revert because setTierCashOutWeightsTo checks for SCORING phase
-        vm.expectRevert(DefifaHook.GAME_ISNT_SCORING_YET.selector);
+        vm.expectRevert(DefifaHook.DefifaHook_GameIsntScoringYet.selector);
         _gov.ratifyScorecardFrom(_gameId, sc);
     }
 
@@ -567,7 +567,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
         assertEq(uint256(deployer.currentGamePhaseOf(_pid)), uint256(DefifaGamePhase.SCORING));
 
         // Should revert since the game is SCORING, not NO_CONTEST
-        vm.expectRevert(DefifaDeployer.NOT_NO_CONTEST.selector);
+        vm.expectRevert(DefifaDeployer.DefifaDeployer_NotNoContest.selector);
         deployer.triggerNoContestFor(_pid);
     }
 
@@ -588,7 +588,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
         deployer.triggerNoContestFor(_pid);
 
         // Second trigger reverts
-        vm.expectRevert(DefifaDeployer.NO_CONTEST_ALREADY_TRIGGERED.selector);
+        vm.expectRevert(DefifaDeployer.DefifaDeployer_NoContestAlreadyTriggered.selector);
         deployer.triggerNoContestFor(_pid);
     }
 
@@ -619,7 +619,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
 
         // Cash out should revert before trigger (surplus = 0 on SCORING ruleset)
         vm.prank(_users[0]);
-        vm.expectRevert(DefifaHook.NOTHING_TO_CLAIM.selector);
+        vm.expectRevert(DefifaHook.DefifaHook_NothingToClaim.selector);
         JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
             holder: _users[0], projectId: _pid, cashOutCount: 0,
             tokenToReclaim: JBConstants.NATIVE_TOKEN, minTokensReclaimed: 0,
@@ -668,7 +668,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
         assertEq(uint256(deployer.currentGamePhaseOf(_pid)), uint256(DefifaGamePhase.COMPLETE), "should stay COMPLETE forever");
 
         // triggerNoContestFor should revert since we're COMPLETE, not NO_CONTEST
-        vm.expectRevert(DefifaDeployer.NOT_NO_CONTEST.selector);
+        vm.expectRevert(DefifaDeployer.DefifaDeployer_NotNoContest.selector);
         deployer.triggerNoContestFor(_pid);
 
         // Cash out user 0 — should receive their share (approximately 1 ETH minus fees)

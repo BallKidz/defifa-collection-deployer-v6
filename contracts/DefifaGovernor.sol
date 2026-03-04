@@ -25,14 +25,14 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
-    error ALREADY_ATTESTED();
-    error ALREADY_RATIFIED();
-    error GAME_NOT_FOUND();
-    error NOT_ALLOWED();
-    error DUPLICATE_SCORECARD();
-    error INCORRECT_TIER_ORDER();
-    error UNKNOWN_PROPOSAL();
-    error UNOWNED_PROPOSED_CASHOUT_VALUE();
+    error DefifaGovernor_AlreadyAttested();
+    error DefifaGovernor_AlreadyRatified();
+    error DefifaGovernor_GameNotFound();
+    error DefifaGovernor_NotAllowed();
+    error DefifaGovernor_DuplicateScorecard();
+    error DefifaGovernor_IncorrectTierOrder();
+    error DefifaGovernor_UnknownProposal();
+    error DefifaGovernor_UnownedProposedCashoutValue();
 
     //*********************************************************************//
     // ---------------- immutable internal stored properties ------------- //
@@ -144,7 +144,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Make sure the proposal is known.
         if (_scorecard.attestationsBegin == 0) {
-            revert UNKNOWN_PROPOSAL();
+            revert DefifaGovernor_UnknownProposal();
         }
 
         // If the scorecard has attestations beginning in the future, the state is PENDING.
@@ -306,10 +306,10 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (uint256 scorecardId)
     {
         // Make sure a proposal hasn't yet been ratified.
-        if (ratifiedScorecardIdOf[_gameId] != 0) revert ALREADY_RATIFIED();
+        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
 
         // Make sure the game has been initialized.
-        if (_packedScorecardInfoOf[_gameId] == 0) revert GAME_NOT_FOUND();
+        if (_packedScorecardInfoOf[_gameId] == 0) revert DefifaGovernor_GameNotFound();
 
         // Make sure no weight is assigned to an unowned tier.
         uint256 _numberOfTierWeights = _tierWeights.length;
@@ -321,12 +321,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         if (
             IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
                 != DefifaGamePhase.SCORING
-        ) revert NOT_ALLOWED();
+        ) revert DefifaGovernor_NotAllowed();
 
         // If there's a weight assigned to the tier, make sure there is a token backed by it.
         for (uint256 _i; _i < _numberOfTierWeights; _i++) {
             if (_tierWeights[_i].cashOutWeight > 0 && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
-                revert UNOWNED_PROPOSED_CASHOUT_VALUE();
+                revert DefifaGovernor_UnownedProposedCashoutValue();
             }
         }
 
@@ -335,7 +335,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Store the scorecard
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][scorecardId];
-        if (_scorecard.attestationsBegin != 0) revert DUPLICATE_SCORECARD();
+        if (_scorecard.attestationsBegin != 0) revert DefifaGovernor_DuplicateScorecard();
 
         uint256 _attestationStartTime = attestationStartTimeOf(_gameId);
         uint256 _timeUntilAttestationsBegin =
@@ -369,7 +369,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         if (
             IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
                 != DefifaGamePhase.SCORING
-        ) revert NOT_ALLOWED();
+        ) revert DefifaGovernor_NotAllowed();
 
         // Keep a reference to the scorecard being attested to.
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][_scorecardId];
@@ -378,14 +378,14 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         DefifaScorecardState _state = stateOf(_gameId, _scorecardId);
 
         if (_state != DefifaScorecardState.ACTIVE && _state != DefifaScorecardState.SUCCEEDED) {
-            revert NOT_ALLOWED();
+            revert DefifaGovernor_NotAllowed();
         }
 
         // Keep a reference to the attestations for the scorecard.
         DefifaAttestations storage _attestations = _scorecardAttestationsOf[_gameId][_scorecardId];
 
         // Make sure the account isn't attesting to the same scorecard again.
-        if (_attestations.hasAttested[msg.sender]) revert ALREADY_ATTESTED();
+        if (_attestations.hasAttested[msg.sender]) revert DefifaGovernor_AlreadyAttested();
 
         // Get a reference to the attestation weight.
         weight = getAttestationWeight(_gameId, msg.sender, _scorecard.attestationsBegin);
@@ -408,7 +408,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (uint256 scorecardId)
     {
         // Make sure a scorecard hasn't been ratified yet.
-        if (ratifiedScorecardIdOf[_gameId] != 0) revert ALREADY_RATIFIED();
+        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
 
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
@@ -420,7 +420,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         scorecardId = _hashScorecardOf(_metadata.dataHook, _calldata);
 
         // Make sure the proposal being ratified has suceeded.
-        if (stateOf(_gameId, scorecardId) != DefifaScorecardState.SUCCEEDED) revert NOT_ALLOWED();
+        if (stateOf(_gameId, scorecardId) != DefifaScorecardState.SUCCEEDED) revert DefifaGovernor_NotAllowed();
 
         // Set the ratified scorecard.
         ratifiedScorecardIdOf[_gameId] = scorecardId;
