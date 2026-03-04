@@ -10,6 +10,7 @@ import {IDefifaDeployer} from "./interfaces/IDefifaDeployer.sol";
 import {DefifaScorecard} from "./structs/DefifaScorecard.sol";
 import {DefifaAttestations} from "./structs/DefifaAttestations.sol";
 import {DefifaTierCashOutWeight} from "./structs/DefifaTierCashOutWeight.sol";
+import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 import {DefifaScorecardState} from "./enums/DefifaScorecardState.sol";
 import {DefifaHook} from "./DefifaHook.sol";
 
@@ -313,6 +314,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
+        // Make sure the game is in its scoring phase.
+        if (
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+                != DefifaGamePhase.SCORING
+        ) revert NOT_ALLOWED();
+
         // If there's a weight assigned to the tier, make sure there is a token backed by it.
         for (uint256 _i; _i < _numberOfTierWeights; _i++) {
             if (_tierWeights[_i].cashOutWeight > 0 && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
@@ -352,6 +359,15 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     /// @param _scorecardId The scorecard ID.
     /// @return weight The attestation weight that was applied.
     function attestToScorecardFrom(uint256 _gameId, uint256 _scorecardId) external override returns (uint256 weight) {
+        // Get the game's current funding cycle along with its metadata.
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+
+        // Make sure the game is in its scoring phase.
+        if (
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+                != DefifaGamePhase.SCORING
+        ) revert NOT_ALLOWED();
+
         // Keep a reference to the scorecard being attested to.
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][_scorecardId];
 
