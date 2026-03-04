@@ -103,8 +103,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             governor,
             jbController(),
             _registry,
-            _protocolFeeProjectId,
-            _defifaProjectId
+            _defifaProjectId,
+            _protocolFeeProjectId
         );
 
         // Transfer ownership of the hook to the deployer.
@@ -496,7 +496,6 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             18,
              JBCurrencyIds.ETH
                                                          );
-
         // Assert that the deployer did *NOT* receive any fee tokens.
         // As of the v3 -> v5 migration, fee tokens should now be send directly to the hook.
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(deployer)), 0);
@@ -509,14 +508,14 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             assertEq(_nft.tierCashOutWeights()[i], scorecards[i].cashOutWeight);
             // Craft the metadata: redeem the tokenId
             bytes memory cashOutMetadata;
-            uint256 _receiveNana;
             uint256 _receiveDefifa;
+            uint256 _receiveNana;
             {
                 uint256[] memory cashOutId = new uint256[](1);
                 cashOutId[0] = _generateTokenId(i + 1, 1);
                 cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutId));
 
-                (_receiveNana, _receiveDefifa) = _nft.tokensClaimableFor(cashOutId);
+                (_receiveDefifa, _receiveNana) = _nft.tokensClaimableFor(cashOutId);
             }
             uint256 _nanaBalance = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user);
             uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
@@ -553,7 +552,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             18,
             JBCurrencyIds.ETH
         );
-        assertApproxEqAbs(remainingSurplus, _pot * (_nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight) / _nft.TOTAL_CASHOUT_WEIGHT(), 10 ** 14);
+        uint256 _expected = _pot * (_nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight) / _nft.TOTAL_CASHOUT_WEIGHT();
+        assertApproxEqAbs(remainingSurplus, _expected, 10 ** 14);
 
         // There should be no fee tokens left in the hook.
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(_nft)), 0);

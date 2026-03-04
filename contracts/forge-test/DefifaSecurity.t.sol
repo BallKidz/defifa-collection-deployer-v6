@@ -313,7 +313,8 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
             store: new JB721TiersHookStore(), splits: new JBSplit[](0),
             attestationStartTime: 0, attestationGracePeriod: 100381,
             defaultAttestationDelegate: address(0), tiers: tp,
-            defaultTokenUriResolver: IJB721TokenUriResolver(address(0)), terminal: jbMultiTerminal()
+            defaultTokenUriResolver: IJB721TokenUriResolver(address(0)), terminal: jbMultiTerminal(),
+            minParticipation: 0, scorecardTimeout: 0
         });
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
