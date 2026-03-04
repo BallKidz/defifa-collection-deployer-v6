@@ -8,6 +8,8 @@ import {IJBProjects} from "@bananapus/core-v5/src/interfaces/IJBProjects.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v5/src/JBPermissionIds.sol";
 
 /// @notice A contract that can be sent a project to be burned, while still allowing defifa permissions.
+/// @dev Once the project NFT is transferred here, it cannot be recovered. This contract permanently
+/// holds the project NFT and grants SET_SPLIT_GROUPS permission to the Defifa deployer.
 contract DefifaProjectOwner is IERC721Receiver {
     /// @notice The contract where operator permissions are stored.
     IJBPermissions public permissions;

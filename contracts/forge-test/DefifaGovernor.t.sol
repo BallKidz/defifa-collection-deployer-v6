@@ -381,9 +381,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.warp(block.timestamp + 1);
         assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp)));
         }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -449,10 +448,9 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Have a user mint and refund the tier
         mintAndRefund(_nft, _projectId, 1);
 
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
-        // Generate the scorecards
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
+        // Generate the scorecards — must sum to exactly TOTAL_CASHOUT_WEIGHT
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         uint256 assignedCashOutWeight;
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -461,6 +459,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             if (distribution.length <= i) continue;
             scorecards[i].cashOutWeight = (uint256(distribution[i]) * _nft.TOTAL_CASHOUT_WEIGHT()) / _sumDistribution;
             assignedCashOutWeight += scorecards[i].cashOutWeight;
+        }
+        // Absorb rounding remainder into first tier with weight
+        if (assignedCashOutWeight < _nft.TOTAL_CASHOUT_WEIGHT()) {
+            uint256 remainder = _nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight;
+            for (uint256 i = 0; i < scorecards.length; i++) {
+                if (scorecards[i].cashOutWeight > 0) {
+                    scorecards[i].cashOutWeight += remainder;
+                    break;
+                }
+            }
         }
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
@@ -728,9 +736,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         }
         // Have a user mint and refund the tier
         mintAndRefund(_nft, _projectId, 1);
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](
             nOfOtherTiers + 1
@@ -749,6 +756,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
                 scorecards[i].cashOutWeight += (totalCashOutWeight * uint256(winningTierExtraWeight)) / totalWeight;
             }
             assignedCashOutWeight += scorecards[i].cashOutWeight;
+        }
+        // Absorb rounding remainder into first tier with weight
+        if (assignedCashOutWeight < totalCashOutWeight) {
+            uint256 remainder = totalCashOutWeight - assignedCashOutWeight;
+            for (uint256 i = 0; i < scorecards.length; i++) {
+                if (scorecards[i].cashOutWeight > 0) {
+                    scorecards[i].cashOutWeight += remainder;
+                    break;
+                }
+            }
         }
         {
             // Forward time so proposals can be created
@@ -906,9 +923,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
 
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -995,9 +1011,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.warp(block.timestamp + 1);
         assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp)));
         }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -1010,14 +1025,11 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward time so voting becomes active
         vm.warp(block.timestamp + _governor.attestationStartTimeOf(_gameId));
         // All the users vote
-        // 0 = Against
-        // 1 = For
-        // 2 = Abstain
         for (uint256 i = 0; i < _users.length; i++) {
             vm.prank(_users[i]);
             _governor.attestToScorecardFrom(_gameId, _proposalId);
         }
-        // Execute the proposal
+        // Execute the proposal — should fail because grace period hasn't ended
         vm.expectRevert(DefifaGovernor.NOT_ALLOWED.selector);
         _governor.ratifyScorecardFrom(_gameId, scorecards);
     }
@@ -1059,9 +1071,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward 1 block, user should receive all the voting power of the tier, as its the only NFT
         assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp)));
         }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
 
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
@@ -1090,8 +1101,9 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward the amount of blocks needed to reach the end (and round up)
         vm.warp(block.timestamp + _governor.attestationGracePeriodOf(_gameId) + 1);
         
-        // This is the error we are looking for in this test, it should only trigger when cashOutWeight is more than the max, which should happen at > 10.
-        if (nTiers > 10){
+        // With exact-weight validation, only nTiers == 10 produces an exact sum.
+        // Any other count (under or over) triggers INVALID_CASHOUT_WEIGHTS.
+        if (nTiers != 10){
             vm.expectRevert(DefifaHook.INVALID_CASHOUT_WEIGHTS.selector);
         }
 

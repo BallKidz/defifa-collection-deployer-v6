@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.20;
 
 import "@prb/math/src/Common.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -10,6 +10,7 @@ import {IDefifaDeployer} from "./interfaces/IDefifaDeployer.sol";
 import {DefifaScorecard} from "./structs/DefifaScorecard.sol";
 import {DefifaAttestations} from "./structs/DefifaAttestations.sol";
 import {DefifaTierCashOutWeight} from "./structs/DefifaTierCashOutWeight.sol";
+import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 import {DefifaScorecardState} from "./enums/DefifaScorecardState.sol";
 import {DefifaHook} from "./DefifaHook.sol";
 
@@ -180,7 +181,11 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     }
 
     /// @notice The number of attestation units that must have participated in a proposal for it to be ratified.
-    /// @dev The quorum is 50% voting weight from all tiers that have been minted from.
+    /// @dev Each tier with at least one minted token contributes MAX_ATTESTATION_POWER_TIER to the total
+    /// eligible weight. Quorum is 50% of this total. Because every tier has equal max attestation power
+    /// regardless of supply, each tier's community has equal influence — a tier with 1 token and a tier
+    /// with 100 tokens both cap at MAX_ATTESTATION_POWER_TIER when fully attested. This prevents
+    /// high-supply tiers from dominating governance, keeping the game fair across all outcomes.
     /// @return The quorum number of attestations.
     function quorum(uint256 _gameId) public view override returns (uint256) {
         // Get the game's current funding cycle along with its metadata.
@@ -189,22 +194,27 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Get a reference to the number of tiers.
         uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
 
-        // Keep a reference to the total elligible tier weight.
-        uint256 _elligibleTierWeights;
+        // Keep a reference to the total eligible tier weight.
+        uint256 _eligibleTierWeights;
 
         for (uint256 _i; _i < _numberOfTiers; _i++) {
-            // If there are tokens minted from the tier, take its voting power into consideration.
-            // @NOTE: This should be double checked to make sure its correct.
+            // Each minted tier contributes MAX_ATTESTATION_POWER_TIER to the quorum denominator.
             if (IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
-                _elligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
+                _eligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
             }
         }
 
-        // 50% of all minted tiers.
-        return _elligibleTierWeights / 2;
+        // Quorum = 50% of all minted tiers' attestation power.
+        return _eligibleTierWeights / 2;
     }
 
     /// @notice Gets an account's attestation power given a number of tiers to look through.
+    /// @dev An account's power per tier = MAX_ATTESTATION_POWER_TIER * (account's units / tier's total units).
+    /// This means within a tier, power is proportional to token holdings, but across tiers, each tier's
+    /// total power is capped at MAX_ATTESTATION_POWER_TIER. A holder of 1-of-1 in a tier gets
+    /// MAX_ATTESTATION_POWER_TIER; a holder of 1-of-100 gets MAX_ATTESTATION_POWER_TIER / 100.
+    /// This ensures each game outcome (tier) has equal governance weight — the scorecard reflects
+    /// consensus across outcomes, not dominance by whichever outcome sold the most tokens.
     /// @param _gameId The ID of the game for which attestations are being counted.
     /// @param _account The account to get attestations for.
     /// @param _timestamp The timestamp to measure attestations from.
@@ -215,8 +225,6 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         virtual
         returns (uint256 attestationPower)
     {
-        // NOTE: Make sure attestations are measured at the timestamp (+1) after the voting ends. Make sure we don't allow them in the same block(s).
-
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
@@ -224,14 +232,15 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
 
         for (uint256 _i; _i < _numberOfTiers; _i++) {
-            // Tier's are 1 indexed;
+            // Tiers are 1-indexed.
             uint256 _tierId = _i + 1;
 
-            // Keep a reference to the number of tier attestations for the account.
+            // Get this account's attestation units within the tier (snapshot at _timestamp).
             uint256 _tierAttestationUnitsForAccount =
                 IDefifaHook(_metadata.dataHook).getPastTierAttestationUnitsOf(_account, _tierId, _timestamp);
 
-            // If there is tier attestation power, increment the result by the proportion of attestations the account has to the total, multiplied by the tier's maximum attestation power.
+            // Scale the account's share of the tier to MAX_ATTESTATION_POWER_TIER.
+            // e.g. holding 3 of 10 tokens → 3/10 * MAX_ATTESTATION_POWER_TIER attestation power from this tier.
             unchecked {
                 if (_tierAttestationUnitsForAccount != 0) {
                     attestationPower += mulDiv(
@@ -305,6 +314,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
+        // Make sure the game is in its scoring phase.
+        if (
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+                != DefifaGamePhase.SCORING
+        ) revert NOT_ALLOWED();
+
         // If there's a weight assigned to the tier, make sure there is a token backed by it.
         for (uint256 _i; _i < _numberOfTierWeights; _i++) {
             if (_tierWeights[_i].cashOutWeight > 0 && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
@@ -344,6 +359,15 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     /// @param _scorecardId The scorecard ID.
     /// @return weight The attestation weight that was applied.
     function attestToScorecardFrom(uint256 _gameId, uint256 _scorecardId) external override returns (uint256 weight) {
+        // Get the game's current funding cycle along with its metadata.
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+
+        // Make sure the game is in its scoring phase.
+        if (
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+                != DefifaGamePhase.SCORING
+        ) revert NOT_ALLOWED();
+
         // Keep a reference to the scorecard being attested to.
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][_scorecardId];
 
@@ -398,8 +422,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Set the ratified scorecard.
         ratifiedScorecardIdOf[_gameId] = scorecardId;
 
-        // Execute the scorecard.
-        // TODO: Check why we do it this way.
+        // Execute the scorecard via low-level call since the governor is the delegate's owner.
         (bool success, bytes memory returndata) = _metadata.dataHook.call(_calldata);
         Address.verifyCallResult(success, returndata);
 
