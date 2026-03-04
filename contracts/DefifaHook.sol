@@ -621,7 +621,14 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Keep a reference to the tier being iterated on.
         JB721Tier memory _tier;
 
+        // Keep a reference to the last tier ID to enforce ascending order (no duplicates).
+        uint256 _lastTierId;
+
         for (uint256 _i; _i < _numberOfTierWeights;) {
+            // Enforce strict ascending order to prevent duplicate tier IDs.
+            if (_tierWeights[_i].id <= _lastTierId && _i != 0) revert BAD_TIER_ORDER();
+            _lastTierId = _tierWeights[_i].id;
+
             // Get the tier.
             _tier = store.tierOf(address(this), _tierWeights[_i].id, false);
 
