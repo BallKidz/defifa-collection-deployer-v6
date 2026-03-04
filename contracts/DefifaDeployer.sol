@@ -107,11 +107,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
     /// @notice The divisor that describes the protocol fee that should be taken.
     /// @dev This is equal to 100 divided by the fee percent (e.g. 20 = 5% fee).
-    uint256 public immutable override baseProtocolFeeDivisor;
+    uint256 public constant override BASE_PROTOCOL_FEE_DIVISOR = 20;
 
     /// @notice The divisor that describes the Defifa fee that should be taken.
     /// @dev This is equal to 100 divided by the fee percent (e.g. 20 = 5% fee).
-    uint256 public immutable override defifaFeeDivisor;
+    uint256 public constant override DEFIFA_FEE_DIVISOR = 20;
 
     //*********************************************************************//
     // --------------------- public stored properties -------------------- //
@@ -236,8 +236,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         registry = _registry;
         defifaProjectId = _defifaProjectId;
         baseProtocolProjectId = _baseProtocolProjectId;
-        baseProtocolFeeDivisor = 20;
-        defifaFeeDivisor = 20;
         /// @dev Uses the deployer address as group ID. Game scoring rulesets use uint160(token) as group ID.
         splitGroup = uint256(uint160(address(this)));
     }
@@ -308,7 +306,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 // Add a split for the fee.
                 _splits[_numberOfSplits] = JBSplit({
                     preferAddToBalance: false,
-                    percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
+                    percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / DEFIFA_FEE_DIVISOR),
                     projectId: uint64(defifaProjectId),
                     beneficiary: payable(address(this)),
                     lockedUntil: 0,
@@ -681,19 +679,19 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // Add a split for the NANA fee.
         _splits[_numberOfSplits] = JBSplit({
             preferAddToBalance: false,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor),
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / BASE_PROTOCOL_FEE_DIVISOR),
             projectId: uint64(baseProtocolProjectId),
             // Have the fee be paid directly to the data hook of the project.
             beneficiary: payable(address(_dataHook)),
             lockedUntil: 0,
             hook: IJBSplitHook(address(0))
         });
-        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor;
+        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / BASE_PROTOCOL_FEE_DIVISOR;
 
         // Add a split for the Defifa fee.
         _splits[_numberOfSplits + 1] = JBSplit({
             preferAddToBalance: false,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / DEFIFA_FEE_DIVISOR),
             projectId: uint64(defifaProjectId),
             // Have the fee be paid directly to the data hook of the project.
             beneficiary: payable(address(_dataHook)),
@@ -701,7 +699,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             hook: IJBSplitHook(address(0))
         });
 
-        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor;
+        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / DEFIFA_FEE_DIVISOR;
 
         // Make sure the splits and fees don't exceed the total budget.
         if (_totalPercent > JBConstants.SPLITS_TOTAL_PERCENT) revert SPLITS_DONT_ADD_UP();
