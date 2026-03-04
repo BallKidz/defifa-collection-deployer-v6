@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import {DefifaLaunchProjectData} from "../structs/DefifaLaunchProjectData.sol";
 import {DefifaOpsData} from "../structs/DefifaOpsData.sol";
@@ -50,13 +50,15 @@ interface IDefifaDeployer {
 
     function registry() external view returns (IJBAddressRegistry);
 
-    function defifaFeeDivisor() external view returns (uint256);
+    function DEFIFA_FEE_DIVISOR() external view returns (uint256);
 
-    function baseProtocolFeeDivisor() external view returns (uint256);
+    function BASE_PROTOCOL_FEE_DIVISOR() external view returns (uint256);
 
     function timesFor(uint256 _gameId) external view returns (uint48, uint24, uint24);
 
     function tokenOf(uint256 _gameId) external view returns (address);
+
+    function safetyParamsOf(uint256 _gameId) external view returns (uint256 minParticipation, uint32 scorecardTimeout);
 
     function nextPhaseNeedsQueueing(uint256 _gameId) external view returns (bool);
 
@@ -65,4 +67,6 @@ interface IDefifaDeployer {
     // function queueNextPhaseOf(uint256 _projectId) external returns (uint256 configuration);
 
     function fulfillCommitmentsOf(uint256 _gameId) external;
+
+    function triggerNoContestFor(uint256 _gameId) external;
 }

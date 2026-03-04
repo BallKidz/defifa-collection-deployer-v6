@@ -128,7 +128,7 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
 
     // -----------------------------------------------------------------------
     // Test 1: Fee accounting with default splits (no user splits)
-    // defifa = 5%, nana = 2.5%, total commitment = 7.5%
+    // defifa = 5%, nana = 5%, total commitment = 10%
     // -----------------------------------------------------------------------
     function testFeeAccounting_defaultSplits() external {
         uint8 nTiers = 4;
@@ -145,11 +145,11 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
         );
         assertEq(potBefore, nTiers * 1 ether, "pot should be nTiers ETH");
 
-        // Expected fee: pot * (5% + 2.5%) = pot * 7.5%
-        // defifaFeeDivisor = 20 -> 1_000_000_000 / 20 = 50_000_000 (5%)
-        // baseProtocolFeeDivisor = 40 -> 1_000_000_000 / 40 = 25_000_000 (2.5%)
-        // totalAbsolutePercent = 75_000_000
-        uint256 expectedFee = (potBefore * 75_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
+        // Expected fee: pot * (5% + 5%) = pot * 10%
+        // DEFIFA_FEE_DIVISOR = 20 -> 1_000_000_000 / 20 = 50_000_000 (5%)
+        // BASE_PROTOCOL_FEE_DIVISOR = 20 -> 1_000_000_000 / 20 = 50_000_000 (5%)
+        // totalAbsolutePercent = 100_000_000
+        uint256 expectedFee = (potBefore * 100_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
         uint256 expectedSurplus = potBefore - expectedFee;
 
         // Advance through lifecycle and ratify scorecard.
@@ -191,7 +191,7 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
         _ratifyEvenScorecard(users, _nft, _governor, projectId, nTiers);
         vm.warp(block.timestamp + 1);
 
-        uint256 expectedFee = (potBefore * 75_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
+        uint256 expectedFee = (potBefore * 100_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
         uint256 surplus = potBefore - expectedFee;
 
         // Each user cashes out their NFT.
@@ -248,7 +248,7 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
 
     // -----------------------------------------------------------------------
     // Test 4: Fee accounting with user-provided custom splits
-    // User adds a 10% split -> total commitment = 5% + 2.5% + 10% = 17.5%
+    // User adds a 10% split -> total commitment = 5% + 5% + 10% = 20%
     // -----------------------------------------------------------------------
     function testFeeAccounting_withUserSplits() external {
         uint8 nTiers = 4;
@@ -275,8 +275,8 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             address(jbMultiTerminal()), projectId, JBConstants.NATIVE_TOKEN
         );
 
-        // totalAbsolutePercent = 50_000_000 + 25_000_000 + 100_000_000 = 175_000_000 (17.5%)
-        uint256 expectedFee = (potBefore * 175_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
+        // totalAbsolutePercent = 50_000_000 + 50_000_000 + 100_000_000 = 200_000_000 (20%)
+        uint256 expectedFee = (potBefore * 200_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
         uint256 expectedSurplus = potBefore - expectedFee;
 
         // Ratify scorecard (triggers fulfillment).
@@ -286,7 +286,7 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             address(jbMultiTerminal()), projectId, JBConstants.NATIVE_TOKEN
         );
 
-        assertEq(potAfter, expectedSurplus, "surplus with user splits should be pot - 17.5%");
+        assertEq(potAfter, expectedSurplus, "surplus with user splits should be pot - 20%");
         assertEq(deployer.fulfilledCommitmentsOf(projectId), expectedFee, "fulfilled = fee amount with user splits");
 
         // Verify beneficiary received funds.
@@ -322,8 +322,8 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
         _ratifyEvenScorecard(users, _nft, _governor, projectId, nTiers);
         vm.warp(block.timestamp + 1);
 
-        // 17.5% fee
-        uint256 expectedFee = (potBefore * 175_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
+        // 20% fee (5% nana + 5% defifa + 10% user)
+        uint256 expectedFee = (potBefore * 200_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
         uint256 surplus = potBefore - expectedFee;
 
         // Cash out all tiers.
@@ -349,10 +349,10 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             totalCashedOut += users[i].balance - balBefore;
         }
 
-        assertApproxEqRel(totalCashedOut, surplus, 0.001 ether, "cash-out with user splits should equal surplus after 17.5% fee");
+        assertApproxEqRel(totalCashedOut, surplus, 0.001 ether, "cash-out with user splits should equal surplus after 20% fee");
 
         // Verify that surplus is meaningfully less than with no user splits.
-        uint256 surplusWithoutUserSplits = potBefore - (potBefore * 75_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
+        uint256 surplusWithoutUserSplits = potBefore - (potBefore * 100_000_000) / JBConstants.SPLITS_TOTAL_PERCENT;
         assertTrue(surplus < surplusWithoutUserSplits, "user splits should reduce available surplus");
     }
 
@@ -449,7 +449,9 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             defaultAttestationDelegate: address(0),
             tiers: tierParams,
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
-            terminal: jbMultiTerminal()
+            terminal: jbMultiTerminal(),
+            minParticipation: 0,
+            scorecardTimeout: 0
         });
     }
 
