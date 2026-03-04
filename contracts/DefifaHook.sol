@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import "@bananapus/721-hook-v5/src/JB721TiersHook.sol";
@@ -11,6 +11,7 @@ import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataRes
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
@@ -21,6 +22,7 @@ import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 /// @notice A hook that transforms Juicebox treasury interactions into a Defifa game.
 contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     using Checkpoints for Checkpoints.Trace208;
+    using SafeERC20 for IERC20;
 
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -431,7 +433,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
     /// @notice The $DEFIFA token that is expected to be issued from paying fees.
     /// @notice The $BASE_PROTOCOL token that is expected to be issued from paying fees.
-    // TODO: Change this initial owner (prob).
+    /// @dev The initial owner is msg.sender; ownership is transferred to the governor after initialization.
     constructor(IJBDirectory _directory, IERC20 _defifaToken, IERC20 _baseProtocolToken) Ownable(msg.sender) JB721Hook(_directory) {
         codeOrigin = address(this);
         defifaToken = _defifaToken;
@@ -639,8 +641,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             }
         }
 
-        // Make sure the cumulative amount is contained within the total cashOut weight.
-        if (_cumulativeCashOutWeight > TOTAL_CASHOUT_WEIGHT) revert INVALID_CASHOUT_WEIGHTS();
+        // Make sure the cumulative amount is exactly the total cashOut weight.
+        if (_cumulativeCashOutWeight != TOTAL_CASHOUT_WEIGHT) revert INVALID_CASHOUT_WEIGHTS();
 
         // Mark the cashOut weight as set.
         cashOutWeightIsSet = true;
@@ -657,7 +659,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         external
         payable
         virtual
-        // TODO:Check if we need to make any changes here as we are overriding the new JB721Hook instead.
         override(IJBCashOutHook, JB721Hook)
     {
         // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
@@ -812,7 +813,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             JBMetadataResolver.getDataFor(JBMetadataResolver.getId("pay", codeOrigin), context.payerMetadata);
 
         if (!found) {
-           // TODO: Revert? 
            return;
         }
 
@@ -1027,8 +1027,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         uint256 defifaAmount = defifaToken.balanceOf(address(this)) * shareToBeneficiary / outOfTotal;
 
         // If there is an amount we should send, send it.
-        if (defifaAmount != 0)  defifaToken.transfer(_beneficiary, defifaAmount);
-        if (baseProtocolAmount != 0) baseProtocolToken.transfer(_beneficiary, baseProtocolAmount);
+        if (defifaAmount != 0)  defifaToken.safeTransfer(_beneficiary, defifaAmount);
+        if (baseProtocolAmount != 0) baseProtocolToken.safeTransfer(_beneficiary, baseProtocolAmount);
 
         emit ClaimedTokens(_beneficiary, defifaAmount, baseProtocolAmount, msg.sender);
         

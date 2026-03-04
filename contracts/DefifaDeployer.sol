@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.20;
 
 import "@prb/math/src/Common.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -53,6 +53,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     //*********************************************************************//
 
     error CANT_FULFILL_YET();
+    error NOTHING_TO_FULFILL();
     error GAME_OVER();
     error INVALID_FEE_PERCENT();
     error INVALID_GAME_CONFIGURATION();
@@ -105,17 +106,17 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @notice The hooks registry.
     IJBAddressRegistry public immutable registry;
 
+    /// @notice The divisor that describes the protocol fee that should be taken.
+    /// @dev This is equal to 100 divided by the fee percent (e.g. 20 = 5% fee).
+    uint256 public constant override BASE_PROTOCOL_FEE_DIVISOR = 20;
+
+    /// @notice The divisor that describes the Defifa fee that should be taken.
+    /// @dev This is equal to 100 divided by the fee percent (e.g. 20 = 5% fee).
+    uint256 public constant override DEFIFA_FEE_DIVISOR = 20;
+
     //*********************************************************************//
     // --------------------- public stored properties -------------------- //
     //*********************************************************************//
-
-    /// @notice The divisor that describes the fee that should be taken.
-    /// @dev This is equal to 100 divided by the fee percent.
-    uint256 public override baseProtocolFeeDivisor = 20;
-
-    /// @notice The divisor that describes the fee that should be taken.
-    /// @dev This is equal to 100 divided by the fee percent.
-    uint256 public override defifaFeeDivisor = 20;
 
     /// @notice The amount of commitments a game has fulfilled.
     /// @dev The ID of the game to check.
@@ -236,6 +237,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         registry = _registry;
         defifaProjectId = _defifaProjectId;
         baseProtocolProjectId = _baseProtocolProjectId;
+        /// @dev Uses the deployer address as group ID. Game scoring rulesets use uint160(token) as group ID.
         splitGroup = uint256(uint160(address(this)));
     }
 
@@ -305,7 +307,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 // Add a split for the fee.
                 _splits[_numberOfSplits] = JBSplit({
                     preferAddToBalance: false,
-                    percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
+                    percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / DEFIFA_FEE_DIVISOR),
                     projectId: uint64(defifaProjectId),
                     beneficiary: payable(address(this)),
                     lockedUntil: 0,
@@ -342,7 +344,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             // Set the tier.
             _hookTiers[_i] = JB721TierConfig({
                 price: _defifaTier.price,
-                initialSupply: 999_999_999, // The max allowed value.
+                initialSupply: 999_999_999, // Uncapped minting — max value allowed by the 721 store.
                 votingUnits: 1,
                 reserveFrequency: _defifaTier.reservedRate,
                 reserveBeneficiary: _defifaTier.reservedTokenBeneficiary,
@@ -365,8 +367,20 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             }
         }
 
-        // Clone and initialize the new hook with a new token uri resolver.
-        DefifaHook _hook = DefifaHook(Clones.clone(hookCodeOrigin));
+        // Increment the nonce for this deployment.
+        uint256 _currentNonce = ++_nonce;
+
+        // Clone deterministically using sender and nonce to prevent front-running.
+        // Clones.clone() creates the proxy before initialize() is called, allowing an
+        // attacker to front-run initialization and DOS the game deployment. Using
+        // cloneDeterministic with msg.sender in the salt prevents this since a different
+        // caller produces a different address.
+        DefifaHook _hook = DefifaHook(
+            Clones.cloneDeterministic(
+                hookCodeOrigin,
+                keccak256(abi.encodePacked(msg.sender, _currentNonce))
+            )
+        );
 
         // Use the default uri resolver if provided, else use the hardcoded generic default.
         IJB721TokenUriResolver _uriResolver = _launchProjectData.defaultTokenUriResolver
@@ -388,9 +402,12 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             _defaultAttestationDelegate: _launchProjectData.defaultAttestationDelegate,
             _tierNames: _tierNames
         });
-        
-        // Launch the Juicebox project, and sanity check our gameId.
-        assert(gameId == _launchGame(_launchProjectData, gameId, address(_hook)));
+
+        // Launch the Juicebox project.
+        uint256 _actualGameId = _launchGame(_launchProjectData, gameId, address(_hook));
+
+        // Revert if the game ID does not match (e.g. front-run by another project creation).
+        if (gameId != _actualGameId) revert INVALID_GAME_CONFIGURATION();
 
         // Clone and initialize the new governor.
         governor.initializeGame({
@@ -403,7 +420,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         _hook.transferOwnership(address(governor));
 
         // Add the hook to the registry, contract nonce starts at 1
-        registry.registerAddress(address(this), ++_nonce);
+        registry.registerAddress(address(this), _currentNonce);
 
         emit LaunchGame(gameId, _hook, governor, _uriResolver, msg.sender);
     }
@@ -413,8 +430,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     function fulfillCommitmentsOf(uint256 _gameId) external virtual override {
         // Make sure commitments haven't already been fulfilled.
         if (fulfilledCommitmentsOf[_gameId] != 0) return;
-        // Set the fulfilled commitments to 1 to prevent re-entrance.
-        fulfilledCommitmentsOf[_gameId] = 1;
 
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) =
@@ -424,16 +439,18 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         if (!IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) {
             revert CANT_FULFILL_YET();
         }
-        
+
         // Get the game token and the terminal.
         address _token = _opsOf[_gameId].token;
         IJBMultiTerminal _terminal = IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf(_gameId, _token)));
 
-        // Get the current pot.
+        // Get the current pot and store it. This also prevents re-entrance since the check above will return early.
         uint256 _pot = _terminal.STORE().balanceOf(
             address(_terminal), _gameId, _token
         );
-        
+        if (_pot == 0) revert NOTHING_TO_FULFILL();
+        fulfilledCommitmentsOf[_gameId] = _pot;
+
         // Send the payout to pay all the fees for this game.
         _terminal.sendPayoutsOf({
             projectId: _gameId,
@@ -447,7 +464,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         JBRulesetConfig[] memory rulesetConfigs = new JBRulesetConfig[](1);
         rulesetConfigs[0] = JBRulesetConfig({
             mustStartAtOrAfter: 0,
-            duration: 0, 
+            duration: 0,
             weight: 0,
             weightCutPercent: 0,
             approvalHook: IJBRulesetApprovalHook(address(0)),
@@ -474,15 +491,15 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
                     JB721TiersRulesetMetadata({
                     pauseTransfers: false,
-                    pauseMintPendingReserves: false 
+                    pauseMintPendingReserves: false
                 })
                 ))
             }),
             // No more payouts.
             splitGroups: new JBSplitGroup[](0),
-            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0) 
+            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0)
         });
-        
+
         // Update the ruleset to the final one.
         controller.queueRulesetsOf(_gameId, rulesetConfigs, 'Defifa game has finished.');
 
@@ -503,7 +520,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     //*********************************************************************//
 
     function _launchGame(DefifaLaunchProjectData memory _launchProjectData, uint256 _gameId, address _dataHook) internal returns (uint256 projectId) {
-        // 
+        //
         JBAccountingContext[] memory accountingContexts = new JBAccountingContext[](1);
         accountingContexts[0] = _launchProjectData.token;
 
@@ -517,11 +534,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // Build the rulesets that this Defifa game will go through.
         bool hasRefundPhase = _launchProjectData.refundPeriodDuration != 0;
         JBRulesetConfig[] memory rulesetConfigs = new JBRulesetConfig[](hasRefundPhase ? 3 : 2);
-        
+
         // `MINT` cycle.
         rulesetConfigs[0] = JBRulesetConfig({
             mustStartAtOrAfter: _launchProjectData.start - _launchProjectData.mintPeriodDuration - _launchProjectData.refundPeriodDuration,
-            duration: _launchProjectData.mintPeriodDuration, 
+            duration: _launchProjectData.mintPeriodDuration,
             weight: 0,
             weightCutPercent: 0,
             approvalHook: IJBRulesetApprovalHook(address(0)),
@@ -553,15 +570,15 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 ))
             }),
             splitGroups: new JBSplitGroup[](0),
-            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0) 
+            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0)
         });
-        
+
         uint256 cycleNumber = 1;
         if (hasRefundPhase) {
             // `REFUND` cycle.
             rulesetConfigs[cycleNumber++] = JBRulesetConfig({
                 mustStartAtOrAfter: _launchProjectData.start - _launchProjectData.refundPeriodDuration,
-                duration: _launchProjectData.refundPeriodDuration, 
+                duration: _launchProjectData.refundPeriodDuration,
                 weight: 0,
                 weightCutPercent: 0,
                 approvalHook: IJBRulesetApprovalHook(address(0)),
@@ -594,7 +611,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                     ))
                 }),
                 splitGroups: new JBSplitGroup[](0),
-                fundAccessLimitGroups: new JBFundAccessLimitGroup[](0) 
+                fundAccessLimitGroups: new JBFundAccessLimitGroup[](0)
             });
         }
 
@@ -613,11 +630,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             payoutLimits: payoutAmounts,
             surplusAllowances: new JBCurrencyAmount[](0)
         });
-        
+
         // `SCORING` cycle.
         rulesetConfigs[cycleNumber++] = JBRulesetConfig({
             mustStartAtOrAfter: _launchProjectData.start,
-            duration: 0, 
+            duration: 0,
             weight: 0,
             weightCutPercent: 0,
             approvalHook: IJBRulesetApprovalHook(address(0)),
@@ -644,12 +661,12 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 metadata: uint16(JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
                     JB721TiersRulesetMetadata({
                     pauseTransfers: false,
-                    pauseMintPendingReserves: false 
+                    pauseMintPendingReserves: false
                 })
                 ))
             }),
             splitGroups: _buildSplits(_gameId, _dataHook, _launchProjectData.token.token, _launchProjectData.splits),
-            fundAccessLimitGroups: fundAccessConstraints 
+            fundAccessLimitGroups: fundAccessConstraints
         });
 
         // launch the project.
@@ -657,7 +674,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             owner: address(this),
             projectUri: _launchProjectData.projectUri,
             rulesetConfigurations: rulesetConfigs,
-            terminalConfigurations: terminalConfigs, 
+            terminalConfigurations: terminalConfigs,
             memo: 'Launching Defifa game.'
         });
     }
@@ -678,19 +695,19 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // Add a split for the NANA fee.
         _splits[_numberOfSplits] = JBSplit({
             preferAddToBalance: false,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor),
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / BASE_PROTOCOL_FEE_DIVISOR),
             projectId: uint64(baseProtocolProjectId),
             // Have the fee be paid directly to the data hook of the project.
             beneficiary: payable(address(_dataHook)),
             lockedUntil: 0,
             hook: IJBSplitHook(address(0))
         });
-        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / baseProtocolFeeDivisor;
+        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / BASE_PROTOCOL_FEE_DIVISOR;
 
         // Add a split for the Defifa fee.
         _splits[_numberOfSplits + 1] = JBSplit({
             preferAddToBalance: false,
-            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor),
+            percent: uint32(JBConstants.SPLITS_TOTAL_PERCENT / DEFIFA_FEE_DIVISOR),
             projectId: uint64(defifaProjectId),
             // Have the fee be paid directly to the data hook of the project.
             beneficiary: payable(address(_dataHook)),
@@ -698,8 +715,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             hook: IJBSplitHook(address(0))
         });
 
-        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / defifaFeeDivisor;
-        
+        _totalPercent += JBConstants.SPLITS_TOTAL_PERCENT / DEFIFA_FEE_DIVISOR;
+
+        // Make sure the splits and fees don't exceed the total budget.
+        if (_totalPercent > JBConstants.SPLITS_TOTAL_PERCENT) revert SPLITS_DONT_ADD_UP();
+
         // Add a split for the leftover percentage.
         _splits[_numberOfSplits + 2] = JBSplit({
             preferAddToBalance: true,
@@ -709,7 +729,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
             lockedUntil: 0,
             hook: IJBSplitHook(address(0))
         });
-        
+
         // Build the grouped split for the payment of the game token.
         JBSplitGroup[] memory _groupedSplits = new JBSplitGroup[](1);
         _groupedSplits[0] = JBSplitGroup({groupId: uint256(uint160(_token)), splits: _splits});
