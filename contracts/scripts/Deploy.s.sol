@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.16;
 
-import {Script} from 'forge-std/Script.sol';
-import {ITypeface} from 'lib/typeface/contracts/interfaces/ITypeface.sol';
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {DefifaDelegate} from '../DefifaDelegate.sol';
-import {DefifaDeployer} from '../DefifaDeployer.sol';
-import {DefifaGovernor} from '../DefifaGovernor.sol';
-import {DefifaProjectOwner} from '../DefifaProjectOwner.sol';
-import {DefifaTokenUriResolver} from '../DefifaTokenUriResolver.sol';
-import {Sphinx} from '@sphinx-labs/contracts/SphinxPlugin.sol';
+import {Script} from "forge-std/Script.sol";
+import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DefifaHook} from "../DefifaHook.sol";
+import {DefifaDeployer} from "../DefifaDeployer.sol";
+import {DefifaGovernor} from "../DefifaGovernor.sol";
+import {DefifaProjectOwner} from "../DefifaProjectOwner.sol";
+import {DefifaTokenUriResolver} from "../DefifaTokenUriResolver.sol";
+import {Sphinx} from "@sphinx-labs/contracts/SphinxPlugin.sol";
 
-import '@bananapus/core-v5/script/helpers/CoreDeploymentLib.sol';
-import '@bananapus/address-registry-v5/script/helpers/AddressRegistryDeploymentLib.sol';
+import {CoreDeployment, CoreDeploymentLib} from "@bananapus/core-v5/script/helpers/CoreDeploymentLib.sol";
+import {AddressRegistryDeployment, AddressRegistryDeploymentLib} from "@bananapus/address-registry-v5/script/helpers/AddressRegistryDeploymentLib.sol";
 
 contract DeployMainnet is Script, Sphinx {
   /// @notice tracks the deployment of the core contracts for the chain we are deploying to.
@@ -96,7 +96,7 @@ contract DeployMainnet is Script, Sphinx {
   }
 
   function deploy() public sphinx {
-    DefifaDelegate delegate = new DefifaDelegate{salt: _salt}(
+    DefifaHook hook = new DefifaHook{salt: _salt}(
       core.directory,
       defifaToken,
       baseProtocolToken
@@ -104,7 +104,7 @@ contract DeployMainnet is Script, Sphinx {
     DefifaTokenUriResolver tokenUriResolver = new DefifaTokenUriResolver{salt: _salt}(_typeface);
     DefifaGovernor governor = new DefifaGovernor{salt: _salt}(core.controller, safeAddress());
     DefifaDeployer deployer = new DefifaDeployer{salt: _salt}(
-      address(delegate),
+      address(hook),
       tokenUriResolver,
       governor,
       core.controller,

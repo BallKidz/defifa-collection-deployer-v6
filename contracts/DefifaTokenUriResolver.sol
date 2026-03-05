@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.20;
 
-import "lib/base64/base64.sol";
-import "@prb/math/src/Common.sol";
+import {Base64} from "lib/base64/base64.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
-import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
+import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaTokenUriResolver} from "./interfaces/IDefifaTokenUriResolver.sol";
 import {DefifaFontImporter} from "./libraries/DefifaFontImporter.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 
-import {JBConstants} from '@bananapus/core-v5/src/libraries/JBConstants.sol';
-import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
-import {ERC721} from '@bananapus/721-hook-v5/src/abstract/ERC721.sol';
-import {JB721Tier} from '@bananapus/721-hook-v5/src/structs/JB721Tier.sol';
-import {JBIpfsDecoder} from '@bananapus/721-hook-v5/src/libraries/JBIpfsDecoder.sol';
+import {JBConstants} from "@bananapus/core-v5/src/libraries/JBConstants.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol";
+import {ERC721} from "@bananapus/721-hook-v5/src/abstract/ERC721.sol";
+import {JB721Tier} from "@bananapus/721-hook-v5/src/structs/JB721Tier.sol";
+import {JBIpfsDecoder} from "@bananapus/721-hook-v5/src/libraries/JBIpfsDecoder.sol";
 
 /// @title DefifaTokenUriResolver
 /// @notice Standard Token URIs for Defifa games.
@@ -54,11 +54,11 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
     /// @param _tokenId The ID of the token to get the tier URI for.
     /// @return The token URI corresponding with the tier.
     function tokenUriOf(address _nft, uint256 _tokenId) external view override returns (string memory) {
-        // Keep a reference to the delegate.
-        IDefifaDelegate _delegate = IDefifaDelegate(_nft);
+        // Keep a reference to the hook.
+        IDefifaHook _hook = IDefifaHook(_nft);
 
         // Get the game ID.
-        uint256 _gameId = _delegate.PROJECT_ID();
+        uint256 _gameId = _hook.PROJECT_ID();
 
         // Keep a reference to the game phase text.
         string memory _gamePhaseText;
@@ -70,8 +70,8 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
         string memory _valueText;
 
         // Keep a reference to the game's name.
-        // TODO: Somehow make the `IDefifaDelegate` have the `name` function.
-        string memory _title = ERC721(address(_delegate)).name();
+        // TODO: Somehow make the `IDefifaHook` have the `name` function.
+        string memory _title = ERC721(address(_hook)).name();
 
         // Keep a reference to the tier's name.
         string memory _team;
@@ -84,14 +84,14 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
 
         {
             // Get a reference to the tier.
-            JB721Tier memory _tier = _delegate.store().tierOfTokenId(address(_delegate), _tokenId, false);
+            JB721Tier memory _tier = _hook.store().tierOfTokenId(address(_hook), _tokenId, false);
 
             // Set the tier's name.
-            _team = _delegate.tierNameOf(_tier.id);
+            _team = _hook.tierNameOf(_tier.id);
 
             // Check to see if the tier has a URI. Return it if it does.
             if (_tier.encodedIPFSUri != bytes32(0)) {
-                return JBIpfsDecoder.decode(_delegate.baseURI(), _tier.encodedIPFSUri);
+                return JBIpfsDecoder.decode(_hook.baseURI(), _tier.encodedIPFSUri);
             }
 
             parts[0] = string("data:application/json;base64,");
@@ -112,23 +112,19 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
 
             {
                 // Get a reference to the game phase.
-                DefifaGamePhase _gamePhase = _delegate.gamePhaseReporter().currentGamePhaseOf(_gameId);
+                DefifaGamePhase _gamePhase = _hook.gamePhaseReporter().currentGamePhaseOf(_gameId);
 
                 // Keep a reference to the game pot.
                 (uint256 _gamePot, address _gamePotToken, uint256 _gamePotDecimals) =
-                    _delegate.gamePotReporter().currentGamePotOf(_gameId, false);
+                    _hook.gamePotReporter().currentGamePotOf(_gameId, false);
 
                 // Include the amount redeemed.
-                _gamePot = _gamePot + _delegate.amountRedeemed();
+                _gamePot = _gamePot + _hook.amountRedeemed();
 
                 // Set the pot text.
                 _potText = _formatBalance(_gamePot, _gamePotToken, _gamePotDecimals, _IMG_DECIMAL_FIDELITY);
 
-                if (_gamePhase == DefifaGamePhase.NO_CONTEST) {
-                    _gamePhaseText = "No contest. Refunds open.";
-                } else if (_gamePhase == DefifaGamePhase.NO_CONTEST_INEVITABLE) {
-                    _gamePhaseText = "No contest inevitable. Refunds open.";
-                } else if (_gamePhase == DefifaGamePhase.COUNTDOWN) {
+                if (_gamePhase == DefifaGamePhase.COUNTDOWN) {
                     _gamePhaseText = "Minting starts soon.";
                 } else if (_gamePhase == DefifaGamePhase.MINT) {
                     _gamePhaseText = "Minting and refunds are open.";
@@ -138,10 +134,12 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
                     _gamePhaseText = "Awaiting scorecard approval.";
                 } else if (_gamePhase == DefifaGamePhase.COMPLETE) {
                     _gamePhaseText = "Scorecard locked in. Burn to claim reward.";
+                } else if (_gamePhase == DefifaGamePhase.NO_CONTEST) {
+                    _gamePhaseText = "No contest. Refunds open.";
                 }
 
                 // Keep a reference to the number of tokens outstanding from this tier.
-                uint256 _totalMinted = _delegate.currentSupplyOfTier(_tier.id);
+                uint256 _totalMinted = _hook.currentSupplyOfTier(_tier.id);
 
                 if (_gamePhase == DefifaGamePhase.MINT) {
                     _rarityText = string(
@@ -157,9 +155,9 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
 
                 if (_gamePhase == DefifaGamePhase.SCORING || _gamePhase == DefifaGamePhase.COMPLETE) {
                     uint256 _potPortion = mulDiv(
-                        _gamePot, _delegate.cashOutWeightOf(_tokenId), _delegate.TOTAL_CASHOUT_WEIGHT()
+                        _gamePot, _hook.cashOutWeightOf(_tokenId), _hook.TOTAL_CASHOUT_WEIGHT()
                     );
-                    _valueText = !_delegate.cashOutWeightIsSet()
+                    _valueText = !_hook.cashOutWeightIsSet()
                         ? "Awaiting scorecard..."
                         : _formatBalance(_potPortion, _gamePotToken, _gamePotDecimals, _IMG_DECIMAL_FIDELITY);
                 } else {
@@ -183,7 +181,7 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
                 " | POT: ",
                 _potText,
                 " | CARDS: ",
-                _delegate.store().totalSupplyOf(address(_delegate)).toString(),
+                _hook.store().totalSupplyOf(address(_hook)).toString(),
                 "</text>",
                 '<text x="10" y="50" style="font-size:16px; font-family: Capsules-500; font-weight:500; fill: #ed017c;">',
                 _gamePhaseText,

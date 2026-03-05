@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.20;
 
-import "@prb/math/src/Common.sol";
+import {mulDiv} from "@prb/math/src/Common.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IDefifaDelegate} from "./interfaces/IDefifaDelegate.sol";
+import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGovernor} from "./interfaces/IDefifaGovernor.sol";
 import {IDefifaDeployer} from "./interfaces/IDefifaDeployer.sol";
 import {DefifaScorecard} from "./structs/DefifaScorecard.sol";
 import {DefifaAttestations} from "./structs/DefifaAttestations.sol";
 import {DefifaTierCashOutWeight} from "./structs/DefifaTierCashOutWeight.sol";
+import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
 import {DefifaScorecardState} from "./enums/DefifaScorecardState.sol";
-import {DefifaDelegate} from "./DefifaDelegate.sol";
+import {DefifaHook} from "./DefifaHook.sol";
 
-import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
-import {JBRulesetMetadata} from '@bananapus/core-v5/src/structs/JBRulesetMetadata.sol';
-import {IJB721TiersHookStore} from '@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol';
-import {JB721Tier} from '@bananapus/721-hook-v5/src/structs/JB721Tier.sol';
+import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v5/src/structs/JBRulesetMetadata.sol";
+import {IJB721TiersHookStore} from "@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol";
+import {JB721Tier} from "@bananapus/721-hook-v5/src/structs/JB721Tier.sol";
 
 /// @title DefifaGovernor
 /// @notice Manages the ratification of Defifa scorecards.
@@ -24,14 +25,14 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
     //*********************************************************************//
-    error ALREADY_ATTESTED();
-    error ALREADY_RATIFIED();
-    error GAME_NOT_FOUND();
-    error NOT_ALLOWED();
-    error DUPLICATE_SCORECARD();
-    error INCORRECT_TIER_ORDER();
-    error UNKNOWN_PROPOSAL();
-    error UNOWNED_PROPOSED_CASHOUT_VALUE();
+    error DefifaGovernor_AlreadyAttested();
+    error DefifaGovernor_AlreadyRatified();
+    error DefifaGovernor_GameNotFound();
+    error DefifaGovernor_NotAllowed();
+    error DefifaGovernor_DuplicateScorecard();
+    error DefifaGovernor_IncorrectTierOrder();
+    error DefifaGovernor_UnknownProposal();
+    error DefifaGovernor_UnownedProposedCashoutValue();
 
     //*********************************************************************//
     // ---------------- immutable internal stored properties ------------- //
@@ -103,16 +104,16 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     }
 
     /// @notice The ID of a scorecard representing the provided tier weights.
-    /// @param _gameDelegate The address where the game is being played.
+    /// @param _gameHook The address where the game is being played.
     /// @param _tierWeights The weights of each tier in the scorecard.
-    function scorecardIdOf(address _gameDelegate, DefifaTierCashOutWeight[] calldata _tierWeights)
+    function scorecardIdOf(address _gameHook, DefifaTierCashOutWeight[] calldata _tierWeights)
         external
         pure
         virtual
         override
         returns (uint256)
     {
-        return _hashScorecardOf(_gameDelegate, _buildScorecardCalldataFor(_tierWeights));
+        return _hashScorecardOf(_gameHook, _buildScorecardCalldataFor(_tierWeights));
     }
 
     //*********************************************************************//
@@ -143,7 +144,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Make sure the proposal is known.
         if (_scorecard.attestationsBegin == 0) {
-            revert UNKNOWN_PROPOSAL();
+            revert DefifaGovernor_UnknownProposal();
         }
 
         // If the scorecard has attestations beginning in the future, the state is PENDING.
@@ -180,31 +181,40 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     }
 
     /// @notice The number of attestation units that must have participated in a proposal for it to be ratified.
-    /// @dev The quorum is 50% voting weight from all tiers that have been minted from.
+    /// @dev Each tier with at least one minted token contributes MAX_ATTESTATION_POWER_TIER to the total
+    /// eligible weight. Quorum is 50% of this total. Because every tier has equal max attestation power
+    /// regardless of supply, each tier's community has equal influence — a tier with 1 token and a tier
+    /// with 100 tokens both cap at MAX_ATTESTATION_POWER_TIER when fully attested. This prevents
+    /// high-supply tiers from dominating governance, keeping the game fair across all outcomes.
     /// @return The quorum number of attestations.
     function quorum(uint256 _gameId) public view override returns (uint256) {
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
         // Get a reference to the number of tiers.
-        uint256 _numberOfTiers = IDefifaDelegate(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
+        uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
 
-        // Keep a reference to the total elligible tier weight.
-        uint256 _elligibleTierWeights;
+        // Keep a reference to the total eligible tier weight.
+        uint256 _eligibleTierWeights;
 
         for (uint256 _i; _i < _numberOfTiers; _i++) {
-            // If there are tokens minted from the tier, take its voting power into consideration.
-            // @NOTE: This should be double checked to make sure its correct.
-            if (IDefifaDelegate(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
-                _elligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
+            // Each minted tier contributes MAX_ATTESTATION_POWER_TIER to the quorum denominator.
+            if (IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
+                _eligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
             }
         }
 
-        // 50% of all minted tiers.
-        return _elligibleTierWeights / 2;
+        // Quorum = 50% of all minted tiers' attestation power.
+        return _eligibleTierWeights / 2;
     }
 
     /// @notice Gets an account's attestation power given a number of tiers to look through.
+    /// @dev An account's power per tier = MAX_ATTESTATION_POWER_TIER * (account's units / tier's total units).
+    /// This means within a tier, power is proportional to token holdings, but across tiers, each tier's
+    /// total power is capped at MAX_ATTESTATION_POWER_TIER. A holder of 1-of-1 in a tier gets
+    /// MAX_ATTESTATION_POWER_TIER; a holder of 1-of-100 gets MAX_ATTESTATION_POWER_TIER / 100.
+    /// This ensures each game outcome (tier) has equal governance weight — the scorecard reflects
+    /// consensus across outcomes, not dominance by whichever outcome sold the most tokens.
     /// @param _gameId The ID of the game for which attestations are being counted.
     /// @param _account The account to get attestations for.
     /// @param _timestamp The timestamp to measure attestations from.
@@ -215,29 +225,28 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         virtual
         returns (uint256 attestationPower)
     {
-        // NOTE: Make sure attestations are measured at the timestamp (+1) after the voting ends. Make sure we don't allow them in the same block(s).
-
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
         // Get a reference to the number of tiers.
-        uint256 _numberOfTiers = IDefifaDelegate(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
+        uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
 
         for (uint256 _i; _i < _numberOfTiers; _i++) {
-            // Tier's are 1 indexed;
+            // Tiers are 1-indexed.
             uint256 _tierId = _i + 1;
 
-            // Keep a reference to the number of tier attestations for the account.
+            // Get this account's attestation units within the tier (snapshot at _timestamp).
             uint256 _tierAttestationUnitsForAccount =
-                IDefifaDelegate(_metadata.dataHook).getPastTierAttestationUnitsOf(_account, _tierId, _timestamp);
+                IDefifaHook(_metadata.dataHook).getPastTierAttestationUnitsOf(_account, _tierId, _timestamp);
 
-            // If there is tier attestation power, increment the result by the proportion of attestations the account has to the total, multiplied by the tier's maximum attestation power.
+            // Scale the account's share of the tier to MAX_ATTESTATION_POWER_TIER.
+            // e.g. holding 3 of 10 tokens → 3/10 * MAX_ATTESTATION_POWER_TIER attestation power from this tier.
             unchecked {
                 if (_tierAttestationUnitsForAccount != 0) {
                     attestationPower += mulDiv(
                         MAX_ATTESTATION_POWER_TIER,
                         _tierAttestationUnitsForAccount,
-                        IDefifaDelegate(_metadata.dataHook).getPastTierTotalAttestationUnitsOf(_tierId, _timestamp)
+                        IDefifaHook(_metadata.dataHook).getPastTierTotalAttestationUnitsOf(_tierId, _timestamp)
                     );
                 }
             }
@@ -268,6 +277,9 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Set a default attestation start time if needed.
         if (_attestationStartTime == 0) _attestationStartTime = block.timestamp;
 
+        // Enforce a minimum grace period of 1 day to prevent instant ratification.
+        if (_attestationGracePeriod < 1 days) _attestationGracePeriod = 1 days;
+
         // Pack the values.
         uint256 _packed;
         // attestation start time in bits 0-47 (48 bits).
@@ -294,10 +306,10 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (uint256 scorecardId)
     {
         // Make sure a proposal hasn't yet been ratified.
-        if (ratifiedScorecardIdOf[_gameId] != 0) revert ALREADY_RATIFIED();
+        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
 
         // Make sure the game has been initialized.
-        if (_packedScorecardInfoOf[_gameId] == 0) revert GAME_NOT_FOUND();
+        if (_packedScorecardInfoOf[_gameId] == 0) revert DefifaGovernor_GameNotFound();
 
         // Make sure no weight is assigned to an unowned tier.
         uint256 _numberOfTierWeights = _tierWeights.length;
@@ -305,10 +317,16 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
 
+        // Make sure the game is in its scoring phase.
+        if (
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+                != DefifaGamePhase.SCORING
+        ) revert DefifaGovernor_NotAllowed();
+
         // If there's a weight assigned to the tier, make sure there is a token backed by it.
         for (uint256 _i; _i < _numberOfTierWeights; _i++) {
-            if (_tierWeights[_i].cashOutWeight > 0 && IDefifaDelegate(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
-                revert UNOWNED_PROPOSED_CASHOUT_VALUE();
+            if (_tierWeights[_i].cashOutWeight > 0 && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0) {
+                revert DefifaGovernor_UnownedProposedCashoutValue();
             }
         }
 
@@ -317,7 +335,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Store the scorecard
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][scorecardId];
-        if (_scorecard.attestationsBegin != 0) revert DUPLICATE_SCORECARD();
+        if (_scorecard.attestationsBegin != 0) revert DefifaGovernor_DuplicateScorecard();
 
         uint256 _attestationStartTime = attestationStartTimeOf(_gameId);
         uint256 _timeUntilAttestationsBegin =
@@ -327,7 +345,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         _scorecard.gracePeriodEnds = uint48(block.timestamp + attestationGracePeriodOf(_gameId));
 
         // Keep a reference to the default attestation delegate.
-        address _defaultAttestationDelegate = IDefifaDelegate(_metadata.dataHook).defaultAttestationDelegate();
+        address _defaultAttestationDelegate = IDefifaHook(_metadata.dataHook).defaultAttestationDelegate();
 
         // If the scorecard is being sent from the default attestation delegate, store it.
         if (msg.sender == _defaultAttestationDelegate) {
@@ -344,6 +362,15 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     /// @param _scorecardId The scorecard ID.
     /// @return weight The attestation weight that was applied.
     function attestToScorecardFrom(uint256 _gameId, uint256 _scorecardId) external override returns (uint256 weight) {
+        // Get the game's current funding cycle along with its metadata.
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+
+        // Make sure the game is in its scoring phase.
+        if (
+            IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId)
+                != DefifaGamePhase.SCORING
+        ) revert DefifaGovernor_NotAllowed();
+
         // Keep a reference to the scorecard being attested to.
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][_scorecardId];
 
@@ -351,14 +378,14 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         DefifaScorecardState _state = stateOf(_gameId, _scorecardId);
 
         if (_state != DefifaScorecardState.ACTIVE && _state != DefifaScorecardState.SUCCEEDED) {
-            revert NOT_ALLOWED();
+            revert DefifaGovernor_NotAllowed();
         }
 
         // Keep a reference to the attestations for the scorecard.
         DefifaAttestations storage _attestations = _scorecardAttestationsOf[_gameId][_scorecardId];
 
         // Make sure the account isn't attesting to the same scorecard again.
-        if (_attestations.hasAttested[msg.sender]) revert ALREADY_ATTESTED();
+        if (_attestations.hasAttested[msg.sender]) revert DefifaGovernor_AlreadyAttested();
 
         // Get a reference to the attestation weight.
         weight = getAttestationWeight(_gameId, msg.sender, _scorecard.attestationsBegin);
@@ -381,7 +408,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (uint256 scorecardId)
     {
         // Make sure a scorecard hasn't been ratified yet.
-        if (ratifiedScorecardIdOf[_gameId] != 0) revert ALREADY_RATIFIED();
+        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
 
         // Get the game's current funding cycle along with its metadata.
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
@@ -393,13 +420,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         scorecardId = _hashScorecardOf(_metadata.dataHook, _calldata);
 
         // Make sure the proposal being ratified has suceeded.
-        if (stateOf(_gameId, scorecardId) != DefifaScorecardState.SUCCEEDED) revert NOT_ALLOWED();
+        if (stateOf(_gameId, scorecardId) != DefifaScorecardState.SUCCEEDED) revert DefifaGovernor_NotAllowed();
 
         // Set the ratified scorecard.
         ratifiedScorecardIdOf[_gameId] = scorecardId;
 
-        // Execute the scorecard.
-        // TODO: Check why we do it this way.
+        // Execute the scorecard via low-level call since the governor is the delegate's owner.
         (bool success, bytes memory returndata) = _metadata.dataHook.call(_calldata);
         Address.verifyCallResult(success, returndata);
 
@@ -422,13 +448,13 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (bytes memory)
     {
         // Build the calldata from the tier weights.
-        return abi.encodeWithSelector(DefifaDelegate.setTierCashOutWeightsTo.selector, (_tierWeights));
+        return abi.encodeWithSelector(DefifaHook.setTierCashOutWeightsTo.selector, (_tierWeights));
     }
 
     /// @notice A value representing the contents of a scorecard.
-    /// @param _gameDelegate The address where the game is being played.
+    /// @param _gameHook The address where the game is being played.
     /// @param _calldata The calldata that will be sent if the scorecard is ratified.
-    function _hashScorecardOf(address _gameDelegate, bytes memory _calldata) internal pure virtual returns (uint256) {
-        return uint256(keccak256(abi.encode(_gameDelegate, _calldata)));
+    function _hashScorecardOf(address _gameHook, bytes memory _calldata) internal pure virtual returns (uint256) {
+        return uint256(keccak256(abi.encode(_gameHook, _calldata)));
     }
 }

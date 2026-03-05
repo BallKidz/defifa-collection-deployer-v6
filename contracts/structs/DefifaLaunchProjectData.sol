@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
-import {DefifaTierParams} from './DefifaTierParams.sol';
-import {DefifaOpsData} from './DefifaOpsData.sol';
+import {DefifaTierParams} from "./DefifaTierParams.sol";
+import {DefifaOpsData} from "./DefifaOpsData.sol";
 
-import {JBLaunchProjectConfig} from '@bananapus/721-hook-v5/src/structs/JBLaunchProjectConfig.sol';
-import {JBAccountingContext} from '@bananapus/core-v5/src/structs/JBAccountingContext.sol';
-import {IJB721TiersHookStore} from '@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol';
-import {IJB721TokenUriResolver} from '@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol';
-import {IJBTerminal} from '@bananapus/core-v5/src/interfaces/IJBTerminal.sol';
-import {JBSplit} from '@bananapus/core-v5/src/structs/JBSplit.sol';
+import {JBLaunchProjectConfig} from "@bananapus/721-hook-v5/src/structs/JBLaunchProjectConfig.sol";
+import {JBAccountingContext} from "@bananapus/core-v5/src/structs/JBAccountingContext.sol";
+import {IJB721TiersHookStore} from "@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol";
+import {IJBTerminal} from "@bananapus/core-v5/src/interfaces/IJBTerminal.sol";
+import {JBSplit} from "@bananapus/core-v5/src/structs/JBSplit.sol";
 
 /// @custom:member name The name of the game being created.
 /// @custom:member projectUri Metadata to associate with the project.
@@ -29,6 +29,8 @@ import {JBSplit} from '@bananapus/core-v5/src/structs/JBSplit.sol';
 /// @custom:member defaultTokenUriResolver The contract used to resolve token URIs if not provided by a tier specifically.
 /// @custom:member terminal The payment terminal where the project will accept funds through.
 /// @custom:member store A contract to store standard JB721 data in.
+/// @custom:member minParticipation The minimum treasury balance required for the game to proceed to scoring. If the balance is below this when scoring would begin, the game enters NO_CONTEST. Set to 0 to disable.
+/// @custom:member scorecardTimeout The maximum time (in seconds) after the scoring phase begins for a scorecard to be ratified. If exceeded, the game enters NO_CONTEST. Set to 0 to disable.
 struct DefifaLaunchProjectData {
   string name;
   string projectUri;
@@ -47,4 +49,6 @@ struct DefifaLaunchProjectData {
   IJB721TokenUriResolver defaultTokenUriResolver;
   IJBTerminal terminal;
   IJB721TiersHookStore store;
+  uint256 minParticipation;
+  uint32 scorecardTimeout;
 }

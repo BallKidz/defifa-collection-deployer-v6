@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 /// @custom:param A count of attestations.
 /// @custom:param A mapping of which accounts have attested.

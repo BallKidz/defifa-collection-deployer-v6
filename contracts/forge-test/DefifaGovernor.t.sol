@@ -1,21 +1,33 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.16;
 
+// solhint-disable-next-line no-unused-import
 import "forge-std/Test.sol";
-import "../DefifaGovernor.sol";
-import "../DefifaDeployer.sol";
-import "../DefifaDelegate.sol";
-import "../DefifaDeployer.sol";
-import "../DefifaTokenUriResolver.sol";
-import "@bananapus/721-hook-v5/src/JB721TiersHookStore.sol";
+// solhint-disable-next-line no-unused-import
+import "@bananapus/core-v5/test/helpers/TestBaseWorkflow.sol";
+
+import {DefifaGovernor} from "../DefifaGovernor.sol";
+import {DefifaDeployer} from "../DefifaDeployer.sol";
+import {DefifaHook} from "../DefifaHook.sol";
+import {DefifaTokenUriResolver} from "../DefifaTokenUriResolver.sol";
+import {JB721TiersHookStore} from "@bananapus/721-hook-v5/src/JB721TiersHookStore.sol";
 
 import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataResolver.sol";
 import {MetadataResolverHelper} from "@bananapus/core-v5/test/helpers/MetadataResolverHelper.sol";
-import "@bananapus/core-v5/test/helpers/TestBaseWorkflow.sol";
 import {JBTest} from "@bananapus/core-v5/test/helpers/JBTest.sol";
-import "@bananapus/core-v5/src/libraries/JBRulesetMetadataResolver.sol";
-import "@bananapus/721-hook-v5/src/libraries/JB721TiersRulesetMetadataResolver.sol";
-import '@bananapus/address-registry-v5/src/JBAddressRegistry.sol';
+import {JBRulesetMetadataResolver} from "@bananapus/core-v5/src/libraries/JBRulesetMetadataResolver.sol";
+import {JB721TiersRulesetMetadataResolver} from "@bananapus/721-hook-v5/src/libraries/JB721TiersRulesetMetadataResolver.sol";
+import {JBAddressRegistry} from "@bananapus/address-registry-v5/src/JBAddressRegistry.sol";
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol";
+import {JB721Tier} from "@bananapus/721-hook-v5/src/structs/JB721Tier.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {DefifaDelegation} from "../structs/DefifaDelegation.sol";
+import {DefifaLaunchProjectData} from "../structs/DefifaLaunchProjectData.sol";
+import {DefifaTierParams} from "../structs/DefifaTierParams.sol";
+import {DefifaTierCashOutWeight} from "../structs/DefifaTierCashOutWeight.sol";
 
 contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     using JBRulesetMetadataResolver for JBRuleset;
@@ -29,7 +41,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     uint256 _gameId = 3;
 
     DefifaDeployer deployer;
-    DefifaDelegate delegate;
+    DefifaHook hook;
     DefifaGovernor governor;
 
     address projectOwner = address(bytes20(keccak256("projectOwner")));
@@ -93,22 +105,22 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.prank(projectOwner);
         _defifaProjectTokenAccount = address(jbController().deployERC20For(_defifaProjectId, "Defifa", "DEFIFA", bytes32(0)));
 
-        delegate = new DefifaDelegate(jbDirectory(), IERC20(address(_defifaProjectTokenAccount)), IERC20(_protocolFeeProjectTokenAccount));
+        hook = new DefifaHook(jbDirectory(), IERC20(address(_defifaProjectTokenAccount)), IERC20(_protocolFeeProjectTokenAccount));
         governor = new DefifaGovernor(jbController(), address(this));
         JBAddressRegistry _registry = new JBAddressRegistry();
         DefifaTokenUriResolver _tokenURIResolver = new DefifaTokenUriResolver(ITypeface(address(0)));
         deployer = new DefifaDeployer(
-            address(delegate),
+            address(hook),
             _tokenURIResolver,
             governor,
             jbController(),
             _registry,
-            _protocolFeeProjectId,
-            _defifaProjectId
+            _defifaProjectId,
+            _protocolFeeProjectId
         );
 
-        // Transfer ownership of the delegate to the deployer.
-        delegate.transferOwnership(address(deployer));
+        // Transfer ownership of the hook to the deployer.
+        hook.transferOwnership(address(deployer));
         // Transfer ownership of the governor to the deployer.
         governor.transferOwnership(address(deployer));
     }
@@ -119,7 +131,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.assume(tier != 0);
         address _user = address(bytes20(keccak256("user")));
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
 
         // Phase 1: Mint
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
@@ -167,7 +179,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //     bytes memory metadata = abi.encode(
     //       bytes32(0),
     //       bytes32(0),
-    //       type(IDefifaDelegate).interfaceId,
+    //       type(IDefifaHook).interfaceId,
     //       _users[i],
     //       rawMetadata
     //     );
@@ -297,7 +309,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //   uint8 nTiers = 10;
     //   address[] memory _users = new address[](nTiers);
     //   DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData();
-    //   (uint256 _projectId, DefifaDelegate _nft, ) = createDefifaProject(
+    //   (uint256 _projectId, DefifaHook _nft, ) = createDefifaProject(
     //     uint256(nTiers),
     //     getBasicDefifaLaunchData()
     //   );
@@ -314,7 +326,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //     bytes memory metadata = abi.encode(
     //       bytes32(0),
     //       bytes32(0),
-    //       type(IDefifaDelegate).interfaceId,
+    //       type(IDefifaHook).interfaceId,
     //       false,
     //       false,
     //       false,
@@ -353,7 +365,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint8 nTiers = 10;
         address[] memory _users = new address[](nTiers);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
         // Phase 1: minting
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
@@ -381,9 +393,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.warp(block.timestamp + 1);
         assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp)));
         }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -403,7 +414,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward the amount of blocks needed to reach the end (and round up)
         vm.warp(block.timestamp+ _governor.attestationGracePeriodOf(_gameId) + 1);
         // Execute the proposal
-        vm.expectRevert(DefifaGovernor.NOT_ALLOWED.selector);
+        vm.expectRevert(DefifaGovernor.DefifaGovernor_NotAllowed.selector);
         _governor.ratifyScorecardFrom(_gameId, scorecards);
     }
 
@@ -418,7 +429,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.assume(_sumDistribution > 0);
         address[] memory _users = new address[](nTiers);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
 
         // Phase 1: minting
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
@@ -449,10 +460,9 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Have a user mint and refund the tier
         mintAndRefund(_nft, _projectId, 1);
 
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
-        // Generate the scorecards
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
+        // Generate the scorecards — must sum to exactly TOTAL_CASHOUT_WEIGHT
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         uint256 assignedCashOutWeight;
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -461,6 +471,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             if (distribution.length <= i) continue;
             scorecards[i].cashOutWeight = (uint256(distribution[i]) * _nft.TOTAL_CASHOUT_WEIGHT()) / _sumDistribution;
             assignedCashOutWeight += scorecards[i].cashOutWeight;
+        }
+        // Absorb rounding remainder into first tier with weight
+        if (assignedCashOutWeight < _nft.TOTAL_CASHOUT_WEIGHT()) {
+            uint256 remainder = _nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight;
+            for (uint256 i = 0; i < scorecards.length; i++) {
+                if (scorecards[i].cashOutWeight > 0) {
+                    scorecards[i].cashOutWeight += remainder;
+                    break;
+                }
+            }
         }
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
@@ -488,9 +508,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             18,
              JBCurrencyIds.ETH
                                                          );
-
         // Assert that the deployer did *NOT* receive any fee tokens.
-        // As of the v3 -> v5 migration, fee tokens should now be send directly to the delegate.
+        // As of the v3 -> v5 migration, fee tokens should now be send directly to the hook.
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(deployer)), 0);
         assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(address(deployer)), 0);
 
@@ -501,14 +520,14 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             assertEq(_nft.tierCashOutWeights()[i], scorecards[i].cashOutWeight);
             // Craft the metadata: redeem the tokenId
             bytes memory cashOutMetadata;
-            uint256 _receiveNana;
             uint256 _receiveDefifa;
+            uint256 _receiveNana;
             {
                 uint256[] memory cashOutId = new uint256[](1);
                 cashOutId[0] = _generateTokenId(i + 1, 1);
                 cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutId));
 
-                (_receiveNana, _receiveDefifa) = _nft.tokensClaimableFor(cashOutId);
+                (_receiveDefifa, _receiveNana) = _nft.tokensClaimableFor(cashOutId);
             }
             uint256 _nanaBalance = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user);
             uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
@@ -545,9 +564,10 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             18,
             JBCurrencyIds.ETH
         );
-        assertApproxEqAbs(remainingSurplus, _pot * (_nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight) / _nft.TOTAL_CASHOUT_WEIGHT(), 10 ** 14);
+        uint256 _expected = _pot * (_nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight) / _nft.TOTAL_CASHOUT_WEIGHT();
+        assertApproxEqAbs(remainingSurplus, _expected, 10 ** 14);
 
-        // There should be no fee tokens left in the delegate.
+        // There should be no fee tokens left in the hook.
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(_nft)), 0);
         assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(address(_nft)), 0);
     }
@@ -555,19 +575,19 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     function testVotingPowerDecreasesAfterRefund() public {
         uint256 nOfOtherTiers = 31;
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(uint8(nOfOtherTiers + 1));
-        (uint256 _projectId, DefifaDelegate _delegate, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _hook, DefifaGovernor _governor) = createDefifaProject(defifaData);
 
         // Phase 1: minting
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
 
-        JB721Tier memory _tier = _delegate.store().tierOf(address(_delegate), 1, false);
+        JB721Tier memory _tier = _hook.store().tierOf(address(_hook), 1, false);
         uint256 _cost = _tier.price;
 
         address _delegateUser = address(bytes20(keccak256("_delegateUser")));
         address _refundUser = address(bytes20(keccak256("refund_user")));
         // The user should have no balance
-        assertEq(_delegate.balanceOf(_refundUser), 0);
+        assertEq(_hook.balanceOf(_refundUser), 0);
         // Build metadata to buy specific NFT
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(1); // reward tier, 1 indexed
@@ -586,9 +606,9 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // User should no longer have any funds
         assertEq(_refundUser.balance, 0);
         // The user should have have a token
-        assertEq(_delegate.balanceOf(_refundUser), 1);
+        assertEq(_hook.balanceOf(_refundUser), 1);
 
-        uint256 _numberBurned = _delegate.store().numberOfBurnedFor(address(_delegate), 1);
+        uint256 _numberBurned = _hook.store().numberOfBurnedFor(address(_hook), 1);
         // Craft the metadata: redeem the tokenId
         bytes memory cashOutMetadata;
         {
@@ -610,7 +630,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.warp(block.timestamp + 1);
 
         assertEq(_refundUser.balance, _cost);
-        assertEq(_delegate.balanceOf(_refundUser), 0);
+        assertEq(_hook.balanceOf(_refundUser), 0);
 
         assertEq(0, _governor.getAttestationWeight(_gameId, _refundUser, uint48(block.timestamp)));
     }
@@ -627,7 +647,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
         address[] memory _users = new address[](nOfOtherTiers + nUsersWithWinningTier);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(uint8(nOfOtherTiers + 1));
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
         // Phase 1: minting
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
@@ -671,7 +691,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         //deployer.queueNextPhaseOf(_projectId);
 
         vm.prank(_users[0]);
-        vm.expectRevert(abi.encodeWithSignature("DELEGATE_CHANGES_UNAVAILABLE_IN_THIS_PHASE()"));
+        vm.expectRevert(abi.encodeWithSignature("DefifaHook_DelegateChangesUnavailableInThisPhase()"));
         _nft.setTierDelegateTo(_users[1], 1);
     }
 
@@ -687,7 +707,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
         address[] memory _users = new address[](nOfOtherTiers + nUsersWithWinningTier);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(uint8(nOfOtherTiers + 1));
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
         // Phase 1: minting
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
@@ -728,9 +748,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         }
         // Have a user mint and refund the tier
         mintAndRefund(_nft, _projectId, 1);
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](
             nOfOtherTiers + 1
@@ -749,6 +768,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
                 scorecards[i].cashOutWeight += (totalCashOutWeight * uint256(winningTierExtraWeight)) / totalWeight;
             }
             assignedCashOutWeight += scorecards[i].cashOutWeight;
+        }
+        // Absorb rounding remainder into first tier with weight
+        if (assignedCashOutWeight < totalCashOutWeight) {
+            uint256 remainder = totalCashOutWeight - assignedCashOutWeight;
+            for (uint256 i = 0; i < scorecards.length; i++) {
+                if (scorecards[i].cashOutWeight > 0) {
+                    scorecards[i].cashOutWeight += remainder;
+                    break;
+                }
+            }
         }
         {
             // Forward time so proposals can be created
@@ -872,13 +901,15 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             defaultAttestationDelegate: address(0),
             tiers: tierParams,
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
-            terminal: jbMultiTerminal()
+            terminal: jbMultiTerminal(),
+            minParticipation: 0,
+            scorecardTimeout: 0
         });
-        (uint256 _projectId, DefifaDelegate _nft,) = createDefifaProject(_launchData);
+        (uint256 _projectId, DefifaHook _nft,) = createDefifaProject(_launchData);
         // Wait until the phase 1 start
         vm.warp(_launchProjectAt);
-        // Get the delegate
-        _nft = DefifaDelegate(jbRulesets().currentOf(_projectId).dataHook());
+        // Get the hook
+        _nft = DefifaHook(jbRulesets().currentOf(_projectId).dataHook());
         // We should be in the minting phase now
         assertEq(jbRulesets().currentOf(_projectId).cycleNumber, 1);
         // Queue Phase 2
@@ -901,14 +932,13 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint8 nTiers = 10;
         address[] memory _users = new address[](nTiers);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
         // Phase 1: Mint
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
 
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -917,7 +947,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             scorecards[i].cashOutWeight = i % 2 == 0 ? 1_000_000_000 / (scorecards.length / 2) : 0;
         }
 
-        vm.expectRevert(abi.encodeWithSignature("UNOWNED_PROPOSED_CASHOUT_VALUE()"));
+        vm.expectRevert(abi.encodeWithSignature("DefifaGovernor_UnownedProposedCashoutValue()"));
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
     }
@@ -926,7 +956,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     //     uint8 nTiers = 10;
     //     address[] memory _users = new address[](nTiers);
     //     DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-    //     (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+    //     (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
     //     // Phase 1: Mint
     //     vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
     //     //deployer.queueNextPhaseOf(_projectId);
@@ -967,7 +997,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint8 nTiers = 10;
         address[] memory _users = new address[](nTiers);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
         // Phase 1: Mint
         vm.warp(defifaData.start - defifaData.mintPeriodDuration - defifaData.refundPeriodDuration);
         //deployer.queueNextPhaseOf(_projectId);
@@ -995,9 +1025,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         vm.warp(block.timestamp + 1);
         assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp)));
         }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
         // We can't have a neutral outcome, so we only give shares to tiers that are an even number (in our array)
@@ -1010,15 +1039,12 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward time so voting becomes active
         vm.warp(block.timestamp + _governor.attestationStartTimeOf(_gameId));
         // All the users vote
-        // 0 = Against
-        // 1 = For
-        // 2 = Abstain
         for (uint256 i = 0; i < _users.length; i++) {
             vm.prank(_users[i]);
             _governor.attestToScorecardFrom(_gameId, _proposalId);
         }
-        // Execute the proposal
-        vm.expectRevert(DefifaGovernor.NOT_ALLOWED.selector);
+        // Execute the proposal — should fail because grace period hasn't ended
+        vm.expectRevert(DefifaGovernor.DefifaGovernor_NotAllowed.selector);
         _governor.ratifyScorecardFrom(_gameId, scorecards);
     }
 
@@ -1029,7 +1055,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
         address[] memory _users = new address[](nTiers);
         DefifaLaunchProjectData memory defifaData = getBasicDefifaLaunchData(nTiers);
-        (uint256 _projectId, DefifaDelegate _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
+        (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = createDefifaProject(defifaData);
         
         uint256 cashOutWeight = _nft.TOTAL_CASHOUT_WEIGHT() / 10;
 
@@ -1059,9 +1085,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward 1 block, user should receive all the voting power of the tier, as its the only NFT
         assertEq(_governor.MAX_ATTESTATION_POWER_TIER(), _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp)));
         }
-        // Phase 2: Redeem
-        vm.warp(block.timestamp + defifaData.mintPeriodDuration);
-        //deployer.queueNextPhaseOf(_projectId);
+        // Warp to scoring phase (past start time)
+        vm.warp(defifaData.start + 1);
 
         // Generate the scorecards
         DefifaTierCashOutWeight[] memory scorecards = new DefifaTierCashOutWeight[](nTiers);
@@ -1090,9 +1115,10 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward the amount of blocks needed to reach the end (and round up)
         vm.warp(block.timestamp + _governor.attestationGracePeriodOf(_gameId) + 1);
         
-        // This is the error we are looking for in this test, it should only trigger when cashOutWeight is more than the max, which should happen at > 10.
-        if (nTiers > 10){
-            vm.expectRevert(DefifaDelegate.INVALID_CASHOUT_WEIGHTS.selector);
+        // With exact-weight validation, only nTiers == 10 produces an exact sum.
+        // Any other count (under or over) triggers INVALID_CASHOUT_WEIGHTS.
+        if (nTiers != 10){
+            vm.expectRevert(DefifaHook.DefifaHook_InvalidCashoutWeights.selector);
         }
 
         // Execute the proposal
@@ -1132,31 +1158,33 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             defaultAttestationDelegate: address(0),
             tiers: tierParams,
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
-            terminal: jbMultiTerminal()
+            terminal: jbMultiTerminal(),
+            minParticipation: 0,
+            scorecardTimeout: 0
         });
     }
 
     // ----- internal helpers ------
     function createDefifaProject(DefifaLaunchProjectData memory defifaLaunchData)
     internal
-    returns (uint256 projectId, DefifaDelegate nft, DefifaGovernor _governor)
+    returns (uint256 projectId, DefifaHook nft, DefifaGovernor _governor)
     {
         _governor = governor;
         (projectId) = deployer.launchGameWith(defifaLaunchData);
-        // Get a reference to the latest configured funding cycle's data source, which should be the delegate that was deployed and attached to the project.
+        // Get a reference to the latest configured funding cycle's data hook, which should be the hook that was deployed and attached to the project.
         JBRuleset memory _fc = jbRulesets().currentOf(projectId);
         if (_fc.dataHook() == address(0)) {
             (_fc,) = jbRulesets().latestQueuedOf(projectId);
         }
-        nft = DefifaDelegate(_fc.dataHook());
+        nft = DefifaHook(_fc.dataHook());
     }
 
-    function mintAndRefund(DefifaDelegate _delegate, uint256 _projectId, uint256 _tierId) internal {
-        JB721Tier memory _tier = _delegate.store().tierOf(address(_delegate), _tierId, false);
+    function mintAndRefund(DefifaHook _hook, uint256 _projectId, uint256 _tierId) internal {
+        JB721Tier memory _tier = _hook.store().tierOf(address(_hook), _tierId, false);
         uint256 _cost = _tier.price;
         address _refundUser = address(bytes20(keccak256("refund_user")));
         // The user should have no balance
-        assertEq(_delegate.balanceOf(_refundUser), 0);
+        assertEq(_hook.balanceOf(_refundUser), 0);
         // Build metadata to buy specific NFT
         uint16[] memory rawMetadata = new uint16[](1);
         rawMetadata[0] = uint16(_tierId); // reward tier, 1 indexed
@@ -1169,8 +1197,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // User should no longer have any funds
         assertEq(_refundUser.balance, 0);
         // The user should have have a token
-        assertEq(_delegate.balanceOf(_refundUser), 1);
-        uint256 _numberBurned = _delegate.store().numberOfBurnedFor(address(_delegate), _tierId);
+        assertEq(_hook.balanceOf(_refundUser), 1);
+        uint256 _numberBurned = _hook.store().numberOfBurnedFor(address(_hook), _tierId);
         // Craft the metadata: redeem the tokenId
         bytes memory cashOutMetadata;
         {
@@ -1183,7 +1211,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
             holder: _refundUser,
             projectId: _projectId,
-            cashOutCount: 0, 
+            cashOutCount: 0,
             tokenToReclaim: JBConstants.NATIVE_TOKEN,
             minTokensReclaimed: 0,
             beneficiary: payable(_refundUser),
@@ -1192,7 +1220,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // User should have their original funds again
         assertEq(_refundUser.balance, _cost);
         // User should no longer have the NFT
-        assertEq(_delegate.balanceOf(_refundUser), 0);
+        assertEq(_hook.balanceOf(_refundUser), 0);
     }
 
     // Create launchProjectFor(..) payload
@@ -1226,7 +1254,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
         // Pass the hook ID.
         bytes4[] memory ids = new bytes4[](1);
-        ids[0] = metadataHelper().getId("pay", address(delegate));
+        ids[0] = metadataHelper().getId("pay", address(hook));
 
         // Generate the metadata.
         return metadataHelper().createMetadata(ids, data); 
@@ -1239,7 +1267,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
 
         // Pass the hook ID.
         bytes4[] memory ids = new bytes4[](1);
-        ids[0] = metadataHelper().getId("cashOut", address(delegate));
+        ids[0] = metadataHelper().getId("cashOut", address(hook));
 
         // Generate the metadata.
         return metadataHelper().createMetadata(ids, data); 

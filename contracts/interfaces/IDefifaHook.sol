@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.16;
+pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@bananapus/core-v5/src/interfaces/IJBRulesets.sol";
-import '@bananapus/721-hook-v5/src/interfaces/IJB721Hook.sol';
-import '@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol';
-import '@bananapus/721-hook-v5/src/structs/JB721TiersMintReservesConfig.sol';
+import {IJBRulesets} from "@bananapus/core-v5/src/interfaces/IJBRulesets.sol";
+import {IJB721Hook} from "@bananapus/721-hook-v5/src/interfaces/IJB721Hook.sol";
+import {IJB721TiersHookStore} from "@bananapus/721-hook-v5/src/interfaces/IJB721TiersHookStore.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v5/src/interfaces/IJB721TokenUriResolver.sol";
+import {JB721TiersMintReservesConfig} from "@bananapus/721-hook-v5/src/structs/JB721TiersMintReservesConfig.sol";
 import {JB721TierConfig} from "@bananapus/721-hook-v5/src/structs/JB721TierConfig.sol";
 import {DefifaTierCashOutWeight} from "./../structs/DefifaTierCashOutWeight.sol";
 import {DefifaDelegation} from "./../structs/DefifaDelegation.sol";
 import {IDefifaGamePhaseReporter} from "./IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./IDefifaGamePotReporter.sol";
 
-interface IDefifaDelegate is IJB721Hook {
+interface IDefifaHook is IJB721Hook {
     event Mint(
         uint256 indexed tokenId,
         uint256 indexed tierId,

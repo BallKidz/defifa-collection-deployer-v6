@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import {DefifaScorecardState} from "../enums/DefifaScorecardState.sol";
 import {DefifaTierCashOutWeight} from "../structs/DefifaTierCashOutWeight.sol";
-import {IDefifaDelegate} from "./IDefifaDelegate.sol";
-import {IJBController} from '@bananapus/core-v5/src/interfaces/IJBController.sol';
+import {IDefifaHook} from "./IDefifaHook.sol";
+import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
 
 interface IDefifaGovernor {
     event GameInitialized(
@@ -31,7 +31,7 @@ interface IDefifaGovernor {
 
     function ratifiedScorecardIdOf(uint256 gameId) external view returns (uint256);
 
-    function scorecardIdOf(address _gameDelegate, DefifaTierCashOutWeight[] calldata _tierWeights)
+    function scorecardIdOf(address _gameHook, DefifaTierCashOutWeight[] calldata _tierWeights)
         external
         returns (uint256);
 
