@@ -305,9 +305,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     {
         // Start the game right after the mint and refund durations if it isnt provided.
         if (launchProjectData.start == 0) {
-            launchProjectData.start = uint48(
-                block.timestamp + launchProjectData.mintPeriodDuration + launchProjectData.refundPeriodDuration
-            );
+            launchProjectData.start =
+                uint48(block.timestamp + launchProjectData.mintPeriodDuration + launchProjectData.refundPeriodDuration);
         }
         // Start minting right away if a start time isn't provided.
         else if (
@@ -490,8 +489,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // Get the game token and the terminal.
         address _token = _opsOf[gameId].token;
-        IJBMultiTerminal _terminal =
-            IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf(gameId, _token)));
+        IJBMultiTerminal _terminal = IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf(gameId, _token)));
 
         // Get the current pot and store it. This also prevents re-entrance since the check above will return early.
         uint256 _pot = _terminal.STORE().balanceOf(address(_terminal), gameId, _token);

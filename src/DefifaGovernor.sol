@@ -127,13 +127,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     /// @param gameId The ID of the game to get a proposal state of.
     /// @param scorecardId The ID of the proposal to get the state of.
     /// @return The state.
-    function stateOf(uint256 gameId, uint256 scorecardId)
-        public
-        view
-        virtual
-        override
-        returns (DefifaScorecardState)
-    {
+    function stateOf(uint256 gameId, uint256 scorecardId) public view virtual override returns (DefifaScorecardState) {
         // Keep a reference to the ratified scorecard ID.
         uint256 _ratifiedScorecardId = ratifiedScorecardIdOf[gameId];
 
@@ -387,8 +381,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
 
         // Make sure the game is in its scoring phase.
-        if (IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(gameId) != DefifaGamePhase.SCORING)
-        {
+        if (IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(gameId) != DefifaGamePhase.SCORING) {
             revert DefifaGovernor_NotAllowed();
         }
 

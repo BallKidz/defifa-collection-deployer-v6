@@ -270,7 +270,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// @param tokenId The ID of the token to get the cashOut weight of.
     /// @return The weight.
     function cashOutWeightOf(uint256 tokenId) public view override returns (uint256) {
-        return DefifaHookLib.computeCashOutWeight(tokenId, store, address(this), _tierCashOutWeights, tokensRedeemedFrom);
+        return
+            DefifaHookLib.computeCashOutWeight(tokenId, store, address(this), _tierCashOutWeights, tokensRedeemedFrom);
     }
 
     /// @notice The amount of tokens of a tier that are currently in circulation.
@@ -343,8 +344,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(context.projectId);
 
         // Calculate the amount paid to mint the tokens that are being burned.
-        uint256 _cumulativeMintPrice =
-            DefifaHookLib.computeCumulativeMintPrice(decodedTokenIds, store, address(this));
+        uint256 _cumulativeMintPrice = DefifaHookLib.computeCumulativeMintPrice(decodedTokenIds, store, address(this));
 
         // Use this contract as the only cash out hook.
         hookSpecifications = new JBCashOutHookSpecification[](1);
@@ -947,7 +947,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         internal
         returns (bool beneficiaryReceivedTokens)
     {
-        return DefifaHookLib.claimTokensFor(_beneficiary, shareToBeneficiary, outOfTotal, defifaToken, baseProtocolToken);
+        return
+            DefifaHookLib.claimTokensFor(_beneficiary, shareToBeneficiary, outOfTotal, defifaToken, baseProtocolToken);
     }
 
     /// @notice Before transferring an NFT, register its first owner (if necessary).
