@@ -87,28 +87,28 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     //*********************************************************************//
 
     /// @notice The number of attestations the given scorecard has.
-    /// @param _gameId The ID of the game to which the scorecard belongs.
-    /// @param _scorecardId The ID of the scorecard to get attestations of.
+    /// @param gameId The ID of the game to which the scorecard belongs.
+    /// @param scorecardId The ID of the scorecard to get attestations of.
     /// @return The number of attestations the given scorecard has.
-    function attestationCountOf(uint256 _gameId, uint256 _scorecardId) external view returns (uint256) {
-        return _scorecardAttestationsOf[_gameId][_scorecardId].count;
+    function attestationCountOf(uint256 gameId, uint256 scorecardId) external view returns (uint256) {
+        return _scorecardAttestationsOf[gameId][scorecardId].count;
     }
 
     /// @notice A flag indicating if the given account has already attested to the scorecard.
-    /// @param _gameId The ID of the game to which the scorecard belongs.
-    /// @param _scorecardId The ID of the scorecard to query attestations from.
-    /// @param _account The address to check the attestation status of.
+    /// @param gameId The ID of the game to which the scorecard belongs.
+    /// @param scorecardId The ID of the scorecard to query attestations from.
+    /// @param account The address to check the attestation status of.
     /// @return A flag indicating if the given account has already attested to the scorecard.
-    function hasAttestedTo(uint256 _gameId, uint256 _scorecardId, address _account) external view returns (bool) {
-        return _scorecardAttestationsOf[_gameId][_scorecardId].hasAttested[_account];
+    function hasAttestedTo(uint256 gameId, uint256 scorecardId, address account) external view returns (bool) {
+        return _scorecardAttestationsOf[gameId][scorecardId].hasAttested[account];
     }
 
     /// @notice The ID of a scorecard representing the provided tier weights.
-    /// @param _gameHook The address where the game is being played.
-    /// @param _tierWeights The weights of each tier in the scorecard.
+    /// @param gameHook The address where the game is being played.
+    /// @param tierWeights The weights of each tier in the scorecard.
     function scorecardIdOf(
-        address _gameHook,
-        DefifaTierCashOutWeight[] calldata _tierWeights
+        address gameHook,
+        DefifaTierCashOutWeight[] calldata tierWeights
     )
         external
         pure
@@ -116,7 +116,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         override
         returns (uint256)
     {
-        return _hashScorecardOf(_gameHook, _buildScorecardCalldataFor(_tierWeights));
+        return _hashScorecardOf(gameHook, _buildScorecardCalldataFor(tierWeights));
     }
 
     //*********************************************************************//
@@ -124,10 +124,10 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     //*********************************************************************//
 
     /// @notice The state of a proposal.
-    /// @param _gameId The ID of the game to get a proposal state of.
-    /// @param _scorecardId The ID of the proposal to get the state of.
+    /// @param gameId The ID of the game to get a proposal state of.
+    /// @param scorecardId The ID of the proposal to get the state of.
     /// @return The state.
-    function stateOf(uint256 _gameId, uint256 _scorecardId)
+    function stateOf(uint256 gameId, uint256 scorecardId)
         public
         view
         virtual
@@ -135,16 +135,16 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         returns (DefifaScorecardState)
     {
         // Keep a reference to the ratified scorecard ID.
-        uint256 _ratifiedScorecardId = ratifiedScorecardIdOf[_gameId];
+        uint256 _ratifiedScorecardId = ratifiedScorecardIdOf[gameId];
 
         // If the game has already ratified a scorecard, return succeeded if the ratified proposal is being checked.
         // Else return defeated.
         if (_ratifiedScorecardId != 0) {
-            return _ratifiedScorecardId == _scorecardId ? DefifaScorecardState.RATIFIED : DefifaScorecardState.DEFEATED;
+            return _ratifiedScorecardId == scorecardId ? DefifaScorecardState.RATIFIED : DefifaScorecardState.DEFEATED;
         }
 
         // Get a reference to the scorecard.
-        DefifaScorecard memory _scorecard = _scorecardOf[_gameId][_scorecardId];
+        DefifaScorecard memory _scorecard = _scorecardOf[gameId][scorecardId];
 
         // Make sure the proposal is known.
         if (_scorecard.attestationsBegin == 0) {
@@ -162,27 +162,28 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         }
 
         // If quorum has been reached, the state is SUCCEEDED, otherwise it is ACTIVE.
-        return quorum(_gameId) <= _scorecardAttestationsOf[_gameId][_scorecardId].count
+        return quorum(gameId) <= _scorecardAttestationsOf[gameId][scorecardId].count
             ? DefifaScorecardState.SUCCEEDED
             : DefifaScorecardState.ACTIVE;
     }
 
     /// @notice The amount of time between a scorecard being submitted and attestations to it being enabled, measured in
-    /// seconds. @dev This can be increassed to leave time for users to aquire attestation power, or delegate it, before
+    /// seconds.
+    /// @dev This can be increased to leave time for users to acquire attestation power, or delegate it, before
     /// a scorecard becomes live.
-    /// @param _gameId The ID of the game to get the attestation delay of.
+    /// @param gameId The ID of the game to get the attestation delay of.
     /// @return The delay, in seconds.
-    function attestationStartTimeOf(uint256 _gameId) public view override returns (uint256) {
+    function attestationStartTimeOf(uint256 gameId) public view override returns (uint256) {
         // attestation start time in bits 0-47 (48 bits).
-        return uint256(uint48(_packedScorecardInfoOf[_gameId]));
+        return uint256(uint48(_packedScorecardInfoOf[gameId]));
     }
 
     /// @notice The amount of time that must go by before a scorecard can be ratified.
-    /// @param _gameId The ID of the game to get the attestation period of.
+    /// @param gameId The ID of the game to get the attestation period of.
     /// @return The attestation period in number of blocks.
-    function attestationGracePeriodOf(uint256 _gameId) public view override returns (uint256) {
+    function attestationGracePeriodOf(uint256 gameId) public view override returns (uint256) {
         // attestation grace period in bits 48-95 (48 bits).
-        return uint256(uint48(_packedScorecardInfoOf[_gameId] >> 48));
+        return uint256(uint48(_packedScorecardInfoOf[gameId] >> 48));
     }
 
     /// @notice The number of attestation units that must have participated in a proposal for it to be ratified.
@@ -192,9 +193,9 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     /// with 100 tokens both cap at MAX_ATTESTATION_POWER_TIER when fully attested. This prevents
     /// high-supply tiers from dominating governance, keeping the game fair across all outcomes.
     /// @return The quorum number of attestations.
-    function quorum(uint256 _gameId) public view override returns (uint256) {
+    function quorum(uint256 gameId) public view override returns (uint256) {
         // Get the game's current funding cycle along with its metadata.
-        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
 
         // Get a reference to the number of tiers.
         uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
@@ -378,84 +379,85 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     }
 
     /// @notice Attests to a scorecard.
-    /// @param _gameId The ID of the game to which the scorecard belongs.
-    /// @param _scorecardId The scorecard ID.
+    /// @param gameId The ID of the game to which the scorecard belongs.
+    /// @param scorecardId The scorecard ID.
     /// @return weight The attestation weight that was applied.
-    function attestToScorecardFrom(uint256 _gameId, uint256 _scorecardId) external override returns (uint256 weight) {
+    function attestToScorecardFrom(uint256 gameId, uint256 scorecardId) external override returns (uint256 weight) {
         // Get the game's current funding cycle along with its metadata.
-        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
 
         // Make sure the game is in its scoring phase.
-        if (IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId) != DefifaGamePhase.SCORING)
+        if (IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(gameId) != DefifaGamePhase.SCORING)
         {
             revert DefifaGovernor_NotAllowed();
         }
 
         // Keep a reference to the scorecard being attested to.
-        DefifaScorecard storage _scorecard = _scorecardOf[_gameId][_scorecardId];
+        DefifaScorecard storage _scorecard = _scorecardOf[gameId][scorecardId];
 
         // Keep a reference to the scorecard state.
-        DefifaScorecardState _state = stateOf(_gameId, _scorecardId);
+        DefifaScorecardState _state = stateOf(gameId, scorecardId);
 
         if (_state != DefifaScorecardState.ACTIVE && _state != DefifaScorecardState.SUCCEEDED) {
             revert DefifaGovernor_NotAllowed();
         }
 
         // Keep a reference to the attestations for the scorecard.
-        DefifaAttestations storage _attestations = _scorecardAttestationsOf[_gameId][_scorecardId];
+        DefifaAttestations storage _attestations = _scorecardAttestationsOf[gameId][scorecardId];
 
         // Make sure the account isn't attesting to the same scorecard again.
         if (_attestations.hasAttested[msg.sender]) revert DefifaGovernor_AlreadyAttested();
 
         // Get a reference to the attestation weight.
-        weight = getAttestationWeight(_gameId, msg.sender, _scorecard.attestationsBegin);
+        weight = getAttestationWeight(gameId, msg.sender, _scorecard.attestationsBegin);
 
-        // Increase the attestationc count.
+        // Increase the attestation count.
         _attestations.count += weight;
 
         // Store the fact that the account has attested to the scorecard.
         _attestations.hasAttested[msg.sender] = true;
 
-        emit ScorecardAttested(_gameId, _scorecardId, weight, msg.sender);
+        emit ScorecardAttested(gameId, scorecardId, weight, msg.sender);
     }
 
     /// @notice Ratifies a scorecard that has been approved.
-    /// @param _tierWeights The weights of each tier in the approved scorecard.
+    /// @param gameId The ID of the game.
+    /// @param tierWeights The weights of each tier in the approved scorecard.
     /// @return scorecardId The scorecard ID that was ratified.
     function ratifyScorecardFrom(
-        uint256 _gameId,
-        DefifaTierCashOutWeight[] calldata _tierWeights
+        uint256 gameId,
+        DefifaTierCashOutWeight[] calldata tierWeights
     )
         external
         override
         returns (uint256 scorecardId)
     {
         // Make sure a scorecard hasn't been ratified yet.
-        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
+        if (ratifiedScorecardIdOf[gameId] != 0) revert DefifaGovernor_AlreadyRatified();
 
         // Get the game's current funding cycle along with its metadata.
-        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
 
         // Build the calldata to the target
-        bytes memory _calldata = _buildScorecardCalldataFor(_tierWeights);
+        bytes memory _calldata = _buildScorecardCalldataFor(tierWeights);
 
         // Attempt to execute the proposal.
         scorecardId = _hashScorecardOf(_metadata.dataHook, _calldata);
 
-        // Make sure the proposal being ratified has suceeded.
-        if (stateOf(_gameId, scorecardId) != DefifaScorecardState.SUCCEEDED) revert DefifaGovernor_NotAllowed();
+        // Make sure the proposal being ratified has succeeded.
+        if (stateOf(gameId, scorecardId) != DefifaScorecardState.SUCCEEDED) revert DefifaGovernor_NotAllowed();
 
         // Set the ratified scorecard.
-        ratifiedScorecardIdOf[_gameId] = scorecardId;
+        ratifiedScorecardIdOf[gameId] = scorecardId;
 
         // Execute the scorecard via low-level call since the governor is the delegate's owner.
         (bool success, bytes memory returndata) = _metadata.dataHook.call(_calldata);
         Address.verifyCallResult(success, returndata);
 
         // Fulfill any commitments for the game.
-        IDefifaDeployer(controller.PROJECTS().ownerOf(_gameId)).fulfillCommitmentsOf(_gameId);
+        IDefifaDeployer(controller.PROJECTS().ownerOf(gameId)).fulfillCommitmentsOf(gameId);
 
-        emit ScorecardRatified(_gameId, scorecardId, msg.sender);
+        emit ScorecardRatified(gameId, scorecardId, msg.sender);
     }
 
     //*********************************************************************//
@@ -464,7 +466,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
     /// @notice Build the normalized calldata.
     /// @param _tierWeights The weights of each tier in the scorecard data.
-    /// @return The calldata to send allongside the transactions.
+    /// @return The calldata to send alongside the transactions.
     function _buildScorecardCalldataFor(DefifaTierCashOutWeight[] calldata _tierWeights)
         internal
         pure
