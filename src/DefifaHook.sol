@@ -3,7 +3,6 @@ pragma solidity 0.8.23;
 
 import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import {mulDiv} from "@prb/math/src/Common.sol";
 import {IJBCashOutHook} from "@bananapus/core-v5/src/interfaces/IJBCashOutHook.sol";
 import {IJBDirectory} from "@bananapus/core-v5/src/interfaces/IJBDirectory.sol";
 import {IJBRulesetDataHook} from "@bananapus/core-v5/src/interfaces/IJBRulesetDataHook.sol";
@@ -29,18 +28,17 @@ import {JBMetadataResolver} from "@bananapus/core-v5/src/libraries/JBMetadataRes
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
 import {DefifaTierCashOutWeight} from "./structs/DefifaTierCashOutWeight.sol";
 import {DefifaGamePhase} from "./enums/DefifaGamePhase.sol";
+import {DefifaHookLib} from "./libraries/DefifaHookLib.sol";
 
 /// @title DefifaHook
 /// @notice A hook that transforms Juicebox treasury interactions into a Defifa game.
 contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     using Checkpoints for Checkpoints.Trace208;
-    using SafeERC20 for IERC20;
 
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -147,7 +145,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// @notice The address that'll be set as the attestation delegate by default.
     address public override defaultAttestationDelegate;
 
-    /// @notice The amount that has been redeemed from ths game, refunds are not counted.
+    /// @notice The amount that has been redeemed from this game, refunds are not counted.
     uint256 public override amountRedeemed;
 
     /// @notice The amount of tokens that have been redeemed from a tier, refunds are not counted.
@@ -165,74 +163,76 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice Returns the delegate of an account for specific tier.
-    /// @param _account The account to check for a delegate of.
-    /// @param _tier the tier to check within.
-    function getTierDelegateOf(address _account, uint256 _tier) external view override returns (address) {
-        return _tierDelegation[_account][_tier];
+    /// @param account The account to check for a delegate of.
+    /// @param tier The tier to check within.
+    function getTierDelegateOf(address account, uint256 tier) external view override returns (address) {
+        return _tierDelegation[account][tier];
     }
 
     /// @notice Returns the current attestation power of an address for a specific tier.
-    /// @param _account The address to check.
-    /// @param _tier The tier to check within.
-    function getTierAttestationUnitsOf(address _account, uint256 _tier) external view override returns (uint256) {
-        return _delegateTierCheckpoints[_account][_tier].latest();
+    /// @param account The address to check.
+    /// @param tier The tier to check within.
+    function getTierAttestationUnitsOf(address account, uint256 tier) external view override returns (uint256) {
+        return _delegateTierCheckpoints[account][tier].latest();
     }
 
     /// @notice Returns the past attestation units of a specific address for a specific tier.
-    /// @param _account The address to check.
-    /// @param _tier The tier to check within.
-    /// @param _timestamp the timestamp to check the attestation power at.
+    /// @param account The address to check.
+    /// @param tier The tier to check within.
+    /// @param timestamp The timestamp to check the attestation power at.
     function getPastTierAttestationUnitsOf(
-        address _account,
-        uint256 _tier,
-        uint48 _timestamp
+        address account,
+        uint256 tier,
+        uint48 timestamp
     )
         external
         view
         override
         returns (uint256)
     {
-        return _delegateTierCheckpoints[_account][_tier].upperLookup(_timestamp);
+        return _delegateTierCheckpoints[account][tier].upperLookup(timestamp);
     }
 
     /// @notice Returns the total amount of attestation units that exists for a tier.
-    /// @param _tier The tier to check.
-    function getTierTotalAttestationUnitsOf(uint256 _tier) external view override returns (uint256) {
-        return _totalTierCheckpoints[_tier].latest();
+    /// @param tier The tier to check.
+    function getTierTotalAttestationUnitsOf(uint256 tier) external view override returns (uint256) {
+        return _totalTierCheckpoints[tier].latest();
     }
 
     /// @notice Returns the total amount of attestation units that has existed for a tier.
-    /// @param _tier The tier to check.
-    /// @param _timestamp The timestamp to check the total attestation units at.
+    /// @param tier The tier to check.
+    /// @param timestamp The timestamp to check the total attestation units at.
     function getPastTierTotalAttestationUnitsOf(
-        uint256 _tier,
-        uint48 _timestamp
+        uint256 tier,
+        uint48 timestamp
     )
         external
         view
         override
         returns (uint256)
     {
-        return _totalTierCheckpoints[_tier].upperLookup(_timestamp);
+        return _totalTierCheckpoints[tier].upperLookup(timestamp);
     }
 
     /// @notice The first owner of each token ID, which corresponds to the address that originally contributed to the
-    /// project to receive the NFT. @param _tokenId The ID of the token to get the first owner of.
+    /// project to receive the NFT.
+    /// @param tokenId The ID of the token to get the first owner of.
     /// @return The first owner of the token.
-    function firstOwnerOf(uint256 _tokenId) external view override returns (address) {
+    function firstOwnerOf(uint256 tokenId) external view override returns (address) {
         // Get a reference to the first owner.
-        address _storedFirstOwner = _firstOwnerOf[_tokenId];
+        address _storedFirstOwner = _firstOwnerOf[tokenId];
 
         // If the stored first owner is set, return it.
         if (_storedFirstOwner != address(0)) return _storedFirstOwner;
 
         // Otherwise, the first owner must be the current owner.
-        return _owners[_tokenId];
+        return _owners[tokenId];
     }
 
     /// @notice The name of the tier with the specified ID.
-    function tierNameOf(uint256 _tierId) external view override returns (string memory) {
-        return _tierNameOf[_tierId];
+    /// @param tierId The ID of the tier.
+    function tierNameOf(uint256 tierId) external view override returns (string memory) {
+        return _tierNameOf[tierId];
     }
 
     //*********************************************************************//
@@ -241,11 +241,11 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
     /// @notice The metadata URI of the provided token ID.
     /// @dev Defer to the tokenUriResolver if set, otherwise, use the tokenUri set with the token's tier.
-    /// @param _tokenId The ID of the token to get the tier URI for.
+    /// @param tokenId The ID of the token to get the tier URI for.
     /// @return The token URI corresponding with the tier or the tokenUriResolver URI.
-    function tokenURI(uint256 _tokenId) public view virtual override returns (string memory) {
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
         // Use the resolver.
-        return store.tokenUriResolverOf(address(this)).tokenUriOf(address(this), _tokenId);
+        return store.tokenUriResolverOf(address(this)).tokenUriOf(address(this), tokenId);
     }
 
     /// @notice The cumulative weight the given token IDs have in cashOuts compared to the `_totalCashOutWeight`.
@@ -261,57 +261,22 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         override
         returns (uint256 cumulativeWeight)
     {
-        // Keep a reference to the number of tokens being redeemed.
-        uint256 _tokenCount = tokenIds.length;
-
-        for (uint256 _i; _i < _tokenCount;) {
-            // Calculate what percentage of the tier cashOut amount a single token counts for.
-            cumulativeWeight += cashOutWeightOf(tokenIds[_i]);
-
-            unchecked {
-                ++_i;
-            }
-        }
+        cumulativeWeight = DefifaHookLib.computeCashOutWeightBatch(
+            tokenIds, store, address(this), _tierCashOutWeights, tokensRedeemedFrom
+        );
     }
 
     /// @notice The weight the given token ID has in cashOuts.
-    /// @param _tokenId The ID of the token to get the cashOut weight of.
+    /// @param tokenId The ID of the token to get the cashOut weight of.
     /// @return The weight.
-    function cashOutWeightOf(uint256 _tokenId) public view override returns (uint256) {
-        // Keep a reference to the token's tier ID.
-        uint256 _tierId = store.tierIdOfToken(_tokenId);
-
-        // Keep a reference to the tier.
-        JB721Tier memory _tier = store.tierOf(address(this), _tierId, false);
-
-        // Get the tier's weight.
-        uint256 _weight = _tierCashOutWeights[_tierId - 1];
-
-        // If there's no weight there's nothing to redeem.
-        if (_weight == 0) return 0;
-
-        // Get the amount of tokens that have already been burned.
-        uint256 _burnedTokens = store.numberOfBurnedFor(address(this), _tierId);
-
-        // If no tiers were minted, nothing to redeem.
-        if (_tier.initialSupply - (_tier.remainingSupply + _burnedTokens) == 0) return 0;
-
-        // Calculate the amount of tokens that existed at the start of the last phase.
-        uint256 _totalTokensForCashoutInTier =
-            _tier.initialSupply - _tier.remainingSupply - (_burnedTokens - tokensRedeemedFrom[_tierId]);
-
-        // Calculate the percentage of the tier cashOut amount a single token counts for.
-        // NOTE: Integer division truncates. Up to (_totalTokensForCashoutInTier - 1) units of weight
-        // per tier are permanently unclaimable. With TOTAL_CASHOUT_WEIGHT = 1e18 and typical token
-        // counts, this amounts to negligible dust (< 1 wei per tier in most games).
-        return _weight / _totalTokensForCashoutInTier;
+    function cashOutWeightOf(uint256 tokenId) public view override returns (uint256) {
+        return DefifaHookLib.computeCashOutWeight(tokenId, store, address(this), _tierCashOutWeights, tokensRedeemedFrom);
     }
 
     /// @notice The amount of tokens of a tier that are currently in circulation.
-    /// @param _tierId The ID of the tier to get the current supply of.
-    function currentSupplyOfTier(uint256 _tierId) public view returns (uint256) {
-        JB721Tier memory _tier = store.tierOf(address(this), _tierId, false);
-        return _tier.initialSupply - (_tier.remainingSupply + store.numberOfBurnedFor(address(this), _tierId));
+    /// @param tierId The ID of the tier to get the current supply of.
+    function currentSupplyOfTier(uint256 tierId) public view returns (uint256) {
+        return DefifaHookLib.computeCurrentSupply(store, address(this), tierId);
     }
 
     /// @notice The combined cash out weight of all outstanding NFTs.
@@ -374,34 +339,25 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Decode the metadata.
         if (metadataExists) decodedTokenIds = abi.decode(metadata, (uint256[]));
 
-        // Get the current gae phase.
+        // Get the current game phase.
         DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(context.projectId);
 
-        // Keep a reference to the number of tokens.
-        uint256 _numberOfTokenIds = decodedTokenIds.length;
-
         // Calculate the amount paid to mint the tokens that are being burned.
-        uint256 _cumulativeMintPrice;
-        for (uint256 _i; _i < _numberOfTokenIds; _i++) {
-            _cumulativeMintPrice += store.tierOfTokenId(address(this), decodedTokenIds[_i], false).price;
-        }
+        uint256 _cumulativeMintPrice =
+            DefifaHookLib.computeCumulativeMintPrice(decodedTokenIds, store, address(this));
 
         // Use this contract as the only cash out hook.
         hookSpecifications = new JBCashOutHookSpecification[](1);
         hookSpecifications[0] = JBCashOutHookSpecification(this, 0, abi.encode(_cumulativeMintPrice));
 
-        // If the game is in its minting, refund, or no-contest phase, reclaim amount is the same as it costed to mint.
-        if (
-            _gamePhase == DefifaGamePhase.MINT || _gamePhase == DefifaGamePhase.REFUND
-                || _gamePhase == DefifaGamePhase.NO_CONTEST
-        ) {
-            cashOutCount = _cumulativeMintPrice;
-        } else {
-            // If the game is in its scoring or complete phase, reclaim amount is based on the tier weights.
-            cashOutCount = mulDiv(
-                context.surplus.value + amountRedeemed, cashOutWeightOf(decodedTokenIds, context), TOTAL_CASHOUT_WEIGHT
-            );
-        }
+        // Compute the cash out count based on the game phase.
+        cashOutCount = DefifaHookLib.computeCashOutCount(
+            _gamePhase,
+            _cumulativeMintPrice,
+            context.surplus.value,
+            amountRedeemed,
+            cashOutWeightOf(decodedTokenIds, context)
+        );
 
         // Use the surplus as the total supply.
         totalSupply = context.surplus.value;
@@ -411,55 +367,38 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens claimable for a set of token IDs.
-    /// @param _tokenIds The IDs of the tokens that justify a $DEFIFA claim.
+    /// @param tokenIds The IDs of the tokens that justify a $DEFIFA claim.
     /// @return defifaTokenAmount The amount of $DEFIFA that can be claimed.
     /// @return baseProtocolTokenAmount The amount of $BASE_PROTOCOL that can be claimed.
-    function tokensClaimableFor(uint256[] memory _tokenIds)
+    function tokensClaimableFor(uint256[] memory tokenIds)
         public
         view
         returns (uint256 defifaTokenAmount, uint256 baseProtocolTokenAmount)
     {
-        // Keep track of whether the cashOut is happening during the complete phase.
-        bool _isComplete = gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) == DefifaGamePhase.COMPLETE;
-
         // If the game isn't complete, we do not have any tokens to claim.
-        if (!_isComplete) return (0, 0);
+        if (gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) != DefifaGamePhase.COMPLETE) return (0, 0);
 
-        // Keep a reference to the number of tokens being used for claims.
-        uint256 _numberOfTokens = _tokenIds.length;
-
-        // Calculate the amount paid to mint the tokens that are being burned.
-        uint256 _cumulativeMintPrice;
-        for (uint256 _i; _i < _numberOfTokens; _i++) {
-            _cumulativeMintPrice += store.tierOfTokenId(address(this), _tokenIds[_i], false).price;
-        }
-
-        // Set the amount of total $DEFIFA and $BASE_PROTOCOL token allocation if it hasn't been set yet.
-        (uint256 _defifaTokenAllocation, uint256 _baseProtocolTokenAllocation) = tokenAllocations();
-
-        // If nothing was paid to mint, no fee tokens can be claimed.
-        if (_totalMintCost == 0) {
-            return (0, 0);
-        }
-
-        // Calculate the user's claimable amount proportional to what they paid.
-        defifaTokenAmount = _defifaTokenAllocation * _cumulativeMintPrice / _totalMintCost;
-        baseProtocolTokenAmount = _baseProtocolTokenAllocation * _cumulativeMintPrice / _totalMintCost;
+        return DefifaHookLib.computeTokensClaim(
+            tokenIds,
+            store,
+            address(this),
+            _totalMintCost,
+            defifaToken.balanceOf(address(this)),
+            baseProtocolToken.balanceOf(address(this))
+        );
     }
 
     /// @notice Indicates if this contract adheres to the specified interface.
     /// @dev See {IERC165-supportsInterface}.
-    /// @param _interfaceId The ID of the interface to check for adherence to.
-    function supportsInterface(bytes4 _interfaceId) public view override(IERC165, JB721Hook) returns (bool) {
-        return _interfaceId == type(IDefifaHook).interfaceId || JB721Hook.supportsInterface(_interfaceId);
+    /// @param interfaceId The ID of the interface to check for adherence to.
+    function supportsInterface(bytes4 interfaceId) public view override(IERC165, JB721Hook) returns (bool) {
+        return interfaceId == type(IDefifaHook).interfaceId || JB721Hook.supportsInterface(interfaceId);
     }
 
     //*********************************************************************//
     // -------------------------- constructor ---------------------------- //
     //*********************************************************************//
 
-    /// @notice The $DEFIFA token that is expected to be issued from paying fees.
-    /// @notice The $BASE_PROTOCOL token that is expected to be issued from paying fees.
     /// @dev The initial owner is msg.sender; ownership is transferred to the governor after initialization.
     constructor(
         IJBDirectory _directory,
@@ -561,49 +500,49 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice Mint reserved tokens within the tier for the provided value.
-    /// @param _tierId The ID of the tier to mint within.
-    /// @param _count The number of reserved tokens to mint.
-    function mintReservesFor(uint256 _tierId, uint256 _count) public override {
+    /// @param tierId The ID of the tier to mint within.
+    /// @param count The number of reserved tokens to mint.
+    function mintReservesFor(uint256 tierId, uint256 count) public override {
         // Minting reserves must not be paused.
         if (JB721TiersRulesetMetadataResolver.mintPendingReservesPaused(
                 (JBRulesetMetadataResolver.metadata(rulesets.currentOf(PROJECT_ID)))
             )) revert DefifaHook_ReservedTokenMintingPaused();
 
         // Keep a reference to the reserved token beneficiary.
-        address _reservedTokenBeneficiary = store.reserveBeneficiaryOf(address(this), _tierId);
+        address _reservedTokenBeneficiary = store.reserveBeneficiaryOf(address(this), tierId);
 
         // Get a reference to the old delegate.
-        address _oldDelegate = _tierDelegation[_reservedTokenBeneficiary][_tierId];
+        address _oldDelegate = _tierDelegation[_reservedTokenBeneficiary][tierId];
 
         // Set the delegate as the beneficiary if the beneficiary hasn't already set a delegate.
         if (_oldDelegate == address(0)) {
             _delegateTier(
                 _reservedTokenBeneficiary,
                 defaultAttestationDelegate != address(0) ? defaultAttestationDelegate : _reservedTokenBeneficiary,
-                _tierId
+                tierId
             );
         }
 
         // Record the minted reserves for the tier.
-        uint256[] memory _tokenIds = store.recordMintReservesFor(_tierId, _count);
+        uint256[] memory _tokenIds = store.recordMintReservesFor(tierId, count);
 
         // Keep a reference to the token ID being iterated on.
         uint256 _tokenId;
 
         // Fetch the tier details (needed for votingUnits below).
-        JB721Tier memory _tier = store.tierOf(address(this), _tierId, false);
+        JB721Tier memory _tier = store.tierOf(address(this), tierId, false);
 
         // Increment _totalMintCost so reserved recipients can claim their share of fee tokens ($DEFIFA/$NANA).
-        _totalMintCost += _tier.price * _count;
+        _totalMintCost += _tier.price * count;
 
-        for (uint256 _i; _i < _count;) {
+        for (uint256 _i; _i < count;) {
             // Set the token ID.
             _tokenId = _tokenIds[_i];
 
             // Mint the token.
             _mint(_reservedTokenBeneficiary, _tokenId);
 
-            emit MintReservedToken(_tokenId, _tierId, _reservedTokenBeneficiary, msg.sender);
+            emit MintReservedToken(_tokenId, tierId, _reservedTokenBeneficiary, msg.sender);
 
             unchecked {
                 ++_i;
@@ -612,7 +551,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
         // Transfer the attestation units to the delegate.
         _transferTierAttestationUnits(
-            address(0), _reservedTokenBeneficiary, _tierId, _tier.votingUnits * _tokenIds.length
+            address(0), _reservedTokenBeneficiary, tierId, _tier.votingUnits * _tokenIds.length
         );
     }
 
@@ -622,8 +561,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
     /// @notice Stores the cashOut weights that should be used in the end game phase.
     /// @dev Only this contract's owner can set tier cashOut weights.
-    /// @param _tierWeights The tier weights to set.
-    function setTierCashOutWeightsTo(DefifaTierCashOutWeight[] memory _tierWeights) external override onlyOwner {
+    /// @param tierWeights The tier weights to set.
+    function setTierCashOutWeightsTo(DefifaTierCashOutWeight[] memory tierWeights) external override onlyOwner {
         // Get a reference to the game phase.
         DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(PROJECT_ID);
 
@@ -640,53 +579,13 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             revert DefifaHook_NoContest();
         }
 
-        // Keep a reference to the max tier ID.
-        uint256 _maxTierId = store.maxTierIdOf(address(this));
-
-        // Keep a reference to the cumulative amounts.
-        uint256 _cumulativeCashOutWeight;
-
-        // Keep a reference to the number of tier weights.
-        uint256 _numberOfTierWeights = _tierWeights.length;
-
-        // Keep a reference to the tier being iterated on.
-        JB721Tier memory _tier;
-
-        // Keep a reference to the last tier ID to enforce ascending order (no duplicates).
-        uint256 _lastTierId;
-
-        for (uint256 _i; _i < _numberOfTierWeights;) {
-            // Enforce strict ascending order to prevent duplicate tier IDs.
-            if (_tierWeights[_i].id <= _lastTierId && _i != 0) revert DefifaHook_BadTierOrder();
-            _lastTierId = _tierWeights[_i].id;
-
-            // Get the tier.
-            _tier = store.tierOf(address(this), _tierWeights[_i].id, false);
-
-            // Can't set a cashOut weight for tiers not in category 0.
-            if (_tier.category != 0) revert DefifaHook_InvalidTierId();
-
-            // Attempting to set the cashOut weight for a tier that does not exist (yet) reverts.
-            if (_tier.id > _maxTierId) revert DefifaHook_InvalidTierId();
-
-            // Save the tier weight. Tier's are 1 indexed and should be stored 0 indexed.
-            _tierCashOutWeights[_tier.id - 1] = _tierWeights[_i].cashOutWeight;
-
-            // Increment the cumulative amount.
-            _cumulativeCashOutWeight += _tierWeights[_i].cashOutWeight;
-
-            unchecked {
-                ++_i;
-            }
-        }
-
-        // Make sure the cumulative amount is exactly the total cashOut weight.
-        if (_cumulativeCashOutWeight != TOTAL_CASHOUT_WEIGHT) revert DefifaHook_InvalidCashoutWeights();
+        // Validate weights and build the array. Reverts on invalid input.
+        _tierCashOutWeights = DefifaHookLib.validateAndBuildWeights(tierWeights, store, address(this));
 
         // Mark the cashOut weight as set.
         cashOutWeightIsSet = true;
 
-        emit TierCashOutWeightsSet(_tierWeights, msg.sender);
+        emit TierCashOutWeightsSet(tierWeights, msg.sender);
     }
 
     /// @notice Burns the specified NFTs upon token holder cash out, reclaiming funds from the project's balance for
@@ -771,14 +670,14 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice Mint reserved tokens within the tier for the provided value.
-    /// @param _mintReservesForTiersData Contains information about how many reserved tokens to mint for each tier.
-    function mintReservesFor(JB721TiersMintReservesConfig[] calldata _mintReservesForTiersData) external override {
+    /// @param mintReservesForTiersData Contains information about how many reserved tokens to mint for each tier.
+    function mintReservesFor(JB721TiersMintReservesConfig[] calldata mintReservesForTiersData) external override {
         // Keep a reference to the number of tiers there are to mint reserves for.
-        uint256 _numberOfTiers = _mintReservesForTiersData.length;
+        uint256 _numberOfTiers = mintReservesForTiersData.length;
 
         for (uint256 _i; _i < _numberOfTiers;) {
             // Get a reference to the data being iterated on.
-            JB721TiersMintReservesConfig memory _data = _mintReservesForTiersData[_i];
+            JB721TiersMintReservesConfig memory _data = mintReservesForTiersData[_i];
 
             // Mint for the tier.
             mintReservesFor(_data.tierId, _data.count);
@@ -790,22 +689,22 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice Delegate attestations.
-    /// @param _setTierDelegatesData An array of tiers to set delegates for.
-    function setTierDelegatesTo(DefifaDelegation[] memory _setTierDelegatesData) external virtual override {
+    /// @param delegations An array of tiers to set delegates for.
+    function setTierDelegatesTo(DefifaDelegation[] memory delegations) external virtual override {
         // Make sure the current game phase is the minting phase.
         if (gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) != DefifaGamePhase.MINT) {
             revert DefifaHook_DelegateChangesUnavailableInThisPhase();
         }
 
         // Keep a reference to the number of tier delegates.
-        uint256 _numberOfTierDelegates = _setTierDelegatesData.length;
+        uint256 _numberOfTierDelegates = delegations.length;
 
         // Keep a reference to the data being iterated on.
         DefifaDelegation memory _data;
 
         for (uint256 _i; _i < _numberOfTierDelegates;) {
             // Reference the data being iterated on.
-            _data = _setTierDelegatesData[_i];
+            _data = delegations[_i];
 
             // Make sure a delegate is specified.
             if (_data.delegatee == address(0)) revert DefifaHook_DelegateAddressZero();
@@ -819,15 +718,15 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice Delegate attestations.
-    /// @param _delegatee The account to delegate tier attestation units to.
-    /// @param _tierId The ID of the tier to delegate attestation units for.
-    function setTierDelegateTo(address _delegatee, uint256 _tierId) public virtual override {
+    /// @param delegatee The account to delegate tier attestation units to.
+    /// @param tierId The ID of the tier to delegate attestation units for.
+    function setTierDelegateTo(address delegatee, uint256 tierId) public virtual override {
         // Make sure the current game phase is the minting phase.
         if (gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) != DefifaGamePhase.MINT) {
             revert DefifaHook_DelegateChangesUnavailableInThisPhase();
         }
 
-        _delegateTier(msg.sender, _delegatee, _tierId);
+        _delegateTier(msg.sender, delegatee, tierId);
     }
 
     //*********************************************************************//
@@ -857,51 +756,26 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Make sure something is being minted.
         if (_tierIdsToMint.length == 0) revert DefifaHook_NothingToMint();
 
-        // Keep a reference to the current tier ID.
-        uint256 _currentTierId;
+        // Compute attestation units per unique tier (validates ascending order, reverts on bad order).
+        (uint256[] memory _tierIds, uint256[] memory _attestationAmounts, uint256 _uniqueTierCount) =
+            DefifaHookLib.computeAttestationUnits(_tierIdsToMint, store, address(this));
 
-        // Keep a reference to the number of attestations units currently accumulated for the given tier.
-        uint256 _attestationUnitsForCurrentTier;
-
-        // The price of the tier being iterated on.
-        uint256 _attestationUnits;
-
-        // Keep a reference to the number of tiers.
-        uint256 _numberOfTiers = _tierIdsToMint.length;
-
-        // Transfer attestation units for each tier.
-        for (uint256 _i; _i < _numberOfTiers;) {
-            // Keep track of the current tier being iterated on and its price.
-            if (_currentTierId != _tierIdsToMint[_i]) {
-                // Make sure the tier IDs are passed in order.
-                if (_tierIdsToMint[_i] < _currentTierId) revert DefifaHook_BadTierOrder();
-                _currentTierId = _tierIdsToMint[_i];
-                _attestationUnits = store.tierOf(address(this), _currentTierId, false).votingUnits;
-            }
+        // Apply attestation units for each unique tier.
+        for (uint256 _i; _i < _uniqueTierCount;) {
+            uint256 _tierId = _tierIds[_i];
 
             // Get a reference to the old delegate.
-            address _oldDelegate = _tierDelegation[context.payer][_currentTierId];
+            address _oldDelegate = _tierDelegation[context.payer][_tierId];
 
-            // If there's either a new delegate or old delegate, increase the delegate weight.
+            // If there's either a new delegate or old delegate, set delegation and transfer units.
             if (_attestationDelegate != address(0) || _oldDelegate != address(0)) {
-                // Increment the total attestation units for the tier based on price.
-                if (_i < _numberOfTiers - 1 && _tierIdsToMint[_i + 1] == _currentTierId) {
-                    _attestationUnitsForCurrentTier += _attestationUnits;
-                    // Set the tier's total attestation units.
-                } else {
-                    // Switch delegates if needed.
-                    if (_attestationDelegate != address(0) && _attestationDelegate != _oldDelegate) {
-                        _delegateTier(context.payer, _attestationDelegate, _currentTierId);
-                    }
-
-                    // Transfer the new attestation units.
-                    _transferTierAttestationUnits(
-                        address(0), context.payer, _currentTierId, _attestationUnitsForCurrentTier + _attestationUnits
-                    );
-
-                    // Reset the counter
-                    _attestationUnitsForCurrentTier = 0;
+                // Switch delegates if needed.
+                if (_attestationDelegate != address(0) && _attestationDelegate != _oldDelegate) {
+                    _delegateTier(context.payer, _attestationDelegate, _tierId);
                 }
+
+                // Transfer the attestation units.
+                _transferTierAttestationUnits(address(0), context.payer, _tierId, _attestationAmounts[_i]);
             }
 
             unchecked {
@@ -1073,17 +947,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         internal
         returns (bool beneficiaryReceivedTokens)
     {
-        // Calculate the share of $DEFIFA and $BASE_PROTOCOL tokens to send.
-        uint256 baseProtocolAmount = baseProtocolToken.balanceOf(address(this)) * shareToBeneficiary / outOfTotal;
-        uint256 defifaAmount = defifaToken.balanceOf(address(this)) * shareToBeneficiary / outOfTotal;
-
-        // If there is an amount we should send, send it.
-        if (defifaAmount != 0) defifaToken.safeTransfer(_beneficiary, defifaAmount);
-        if (baseProtocolAmount != 0) baseProtocolToken.safeTransfer(_beneficiary, baseProtocolAmount);
-
-        emit ClaimedTokens(_beneficiary, defifaAmount, baseProtocolAmount, msg.sender);
-
-        return (defifaAmount != 0 || baseProtocolAmount != 0);
+        return DefifaHookLib.claimTokensFor(_beneficiary, shareToBeneficiary, outOfTotal, defifaToken, baseProtocolToken);
     }
 
     /// @notice Before transferring an NFT, register its first owner (if necessary).

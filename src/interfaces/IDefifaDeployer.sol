@@ -11,6 +11,8 @@ import {JBSplit} from "@bananapus/core-v5/src/structs/JBSplit.sol";
 import {IJBController} from "@bananapus/core-v5/src/interfaces/IJBController.sol";
 import {IJBAddressRegistry} from "@bananapus/address-registry-v5/src/interfaces/IJBAddressRegistry.sol";
 
+/// @notice Deploys and manages Defifa prediction games, including lifecycle phase transitions
+/// and commitment fulfillment.
 interface IDefifaDeployer {
     event LaunchGame(
         uint256 indexed gameId,
@@ -30,39 +32,77 @@ interface IDefifaDeployer {
 
     event DistributeToSplit(JBSplit split, uint256 amount, address caller);
 
+    /// @notice The split group ID used for distributing game pot funds.
+    /// @return The split group.
     function splitGroup() external view returns (uint256);
 
+    /// @notice The Juicebox project ID of the Defifa project.
+    /// @return The project ID.
     function defifaProjectId() external view returns (uint256);
 
+    /// @notice The Juicebox project ID of the base protocol project.
+    /// @return The project ID.
     function baseProtocolProjectId() external view returns (uint256);
 
+    /// @notice The code origin address used as an implementation for hook clones.
+    /// @return The code origin address.
     function hookCodeOrigin() external view returns (address);
 
+    /// @notice The token URI resolver used for game NFT metadata.
+    /// @return The token URI resolver contract.
     function tokenUriResolver() external view returns (IJB721TokenUriResolver);
 
+    /// @notice The governor contract used for scorecard governance.
+    /// @return The governor contract.
     function governor() external view returns (IDefifaGovernor);
 
+    /// @notice The Juicebox controller used to manage projects.
+    /// @return The controller contract.
     function controller() external view returns (IJBController);
 
+    /// @notice The address registry used for content-addressable deployment lookups.
+    /// @return The address registry contract.
     function registry() external view returns (IJBAddressRegistry);
 
+    /// @notice The fee divisor for Defifa fees (100 / fee percent).
+    /// @return The fee divisor.
     function DEFIFA_FEE_DIVISOR() external view returns (uint256);
 
+    /// @notice The fee divisor for base protocol fees (100 / fee percent).
+    /// @return The fee divisor.
     function BASE_PROTOCOL_FEE_DIVISOR() external view returns (uint256);
 
-    function timesFor(uint256 _gameId) external view returns (uint48, uint24, uint24);
+    /// @notice The timing parameters for a game.
+    /// @param gameId The ID of the game.
+    /// @return The mint duration, start time, and refund period.
+    function timesFor(uint256 gameId) external view returns (uint48, uint24, uint24);
 
-    function tokenOf(uint256 _gameId) external view returns (address);
+    /// @notice The token address for a game.
+    /// @param gameId The ID of the game.
+    /// @return The token address.
+    function tokenOf(uint256 gameId) external view returns (address);
 
-    function safetyParamsOf(uint256 _gameId) external view returns (uint256 minParticipation, uint32 scorecardTimeout);
+    /// @notice The safety parameters for a game.
+    /// @param gameId The ID of the game.
+    /// @return minParticipation The minimum participation threshold.
+    /// @return scorecardTimeout The scorecard timeout duration.
+    function safetyParamsOf(uint256 gameId) external view returns (uint256 minParticipation, uint32 scorecardTimeout);
 
-    function nextPhaseNeedsQueueing(uint256 _gameId) external view returns (bool);
+    /// @notice Whether the next game phase needs to be queued.
+    /// @param gameId The ID of the game.
+    /// @return True if the next phase needs queueing.
+    function nextPhaseNeedsQueueing(uint256 gameId) external view returns (bool);
 
-    function launchGameWith(DefifaLaunchProjectData calldata _launchProjectData) external returns (uint256 gameId);
+    /// @notice Launch a new Defifa game.
+    /// @param launchProjectData The configuration for launching the game.
+    /// @return gameId The ID of the newly launched game.
+    function launchGameWith(DefifaLaunchProjectData calldata launchProjectData) external returns (uint256 gameId);
 
-    // function queueNextPhaseOf(uint256 _projectId) external returns (uint256 configuration);
+    /// @notice Fulfill the commitments of a game by distributing the pot.
+    /// @param gameId The ID of the game.
+    function fulfillCommitmentsOf(uint256 gameId) external;
 
-    function fulfillCommitmentsOf(uint256 _gameId) external;
-
-    function triggerNoContestFor(uint256 _gameId) external;
+    /// @notice Trigger a no-contest outcome for a game.
+    /// @param gameId The ID of the game.
+    function triggerNoContestFor(uint256 gameId) external;
 }

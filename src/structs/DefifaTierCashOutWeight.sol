@@ -2,7 +2,7 @@
 pragma solidity 0.8.23;
 
 /// @custom:member id The tier's ID.
-/// @custom:member redemptionWeight the weight that all tokens of this tier can be redeemed for.
+/// @custom:member cashOutWeight The weight that all tokens of this tier can be cashed out for.
 struct DefifaTierCashOutWeight {
     uint256 id;
     uint256 cashOutWeight;
