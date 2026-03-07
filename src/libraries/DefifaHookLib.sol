@@ -192,8 +192,9 @@ library DefifaHookLib {
         // Calculate the amount paid to mint the tokens that are being burned.
         uint256 _cumulativeMintPrice;
         for (uint256 _i; _i < _numberOfTokens; _i++) {
-            _cumulativeMintPrice +=
-                _store.tierOfTokenId({hook: hook, tokenId: tokenIds[_i], includeResolvedUri: false}).price;
+            _cumulativeMintPrice += _store.tierOfTokenId({
+                hook: hook, tokenId: tokenIds[_i], includeResolvedUri: false
+            }).price;
         }
 
         // Calculate the user's claimable amount proportional to what they paid.
@@ -217,8 +218,9 @@ library DefifaHookLib {
     {
         uint256 _numberOfTokenIds = tokenIds.length;
         for (uint256 _i; _i < _numberOfTokenIds; _i++) {
-            cumulativeMintPrice +=
-                _store.tierOfTokenId({hook: hook, tokenId: tokenIds[_i], includeResolvedUri: false}).price;
+            cumulativeMintPrice += _store.tierOfTokenId({
+                hook: hook, tokenId: tokenIds[_i], includeResolvedUri: false
+            }).price;
         }
     }
 
@@ -308,7 +310,7 @@ library DefifaHookLib {
                 if (_tierIdsToMint[_i] < _currentTierId) revert DefifaHook_BadTierOrder();
                 _currentTierId = _tierIdsToMint[_i];
                 _attestationUnits =
-                    _store.tierOf({hook: hook, id: _currentTierId, includeResolvedUri: false}).votingUnits;
+                _store.tierOf({hook: hook, id: _currentTierId, includeResolvedUri: false}).votingUnits;
                 _accumulated = _attestationUnits;
             } else {
                 _accumulated += _attestationUnits;

@@ -250,10 +250,8 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
                     attestationPower += mulDiv(
                         MAX_ATTESTATION_POWER_TIER,
                         _tierAttestationUnitsForAccount,
-                        IDefifaHook(_metadata.dataHook).getPastTierTotalAttestationUnitsOf({
-                            tier: _tierId,
-                            timestamp: _timestamp
-                        })
+                        IDefifaHook(_metadata.dataHook)
+                            .getPastTierTotalAttestationUnitsOf({tier: _tierId, timestamp: _timestamp})
                     );
                 }
             }
@@ -349,7 +347,8 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         }
 
         // Hash the scorecard.
-        scorecardId = _hashScorecardOf({_gameHook: _metadata.dataHook, _calldata: _buildScorecardCalldataFor(_tierWeights)});
+        scorecardId =
+            _hashScorecardOf({_gameHook: _metadata.dataHook, _calldata: _buildScorecardCalldataFor(_tierWeights)});
 
         // Store the scorecard
         DefifaScorecard storage _scorecard = _scorecardOf[_gameId][scorecardId];
@@ -405,11 +404,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         if (_attestations.hasAttested[msg.sender]) revert DefifaGovernor_AlreadyAttested();
 
         // Get a reference to the attestation weight.
-        weight = getAttestationWeight({
-            _gameId: gameId,
-            _account: msg.sender,
-            _timestamp: _scorecard.attestationsBegin
-        });
+        weight = getAttestationWeight({_gameId: gameId, _account: msg.sender, _timestamp: _scorecard.attestationsBegin});
 
         // Increase the attestation count.
         _attestations.count += weight;

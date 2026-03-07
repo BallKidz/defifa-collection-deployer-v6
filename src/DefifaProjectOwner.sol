@@ -54,9 +54,7 @@ contract DefifaProjectOwner is IERC721Receiver {
         PERMISSIONS.setPermissionsFor({
             account: address(this),
             permissionsData: JBPermissionsData({
-                operator: address(DEPLOYER),
-                projectId: uint64(tokenId),
-                permissionIds: permissionIds
+                operator: address(DEPLOYER), projectId: uint64(tokenId), permissionIds: permissionIds
             })
         });
 

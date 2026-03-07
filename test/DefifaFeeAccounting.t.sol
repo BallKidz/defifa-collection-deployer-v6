@@ -112,8 +112,8 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             .setPermissionsFor(
                 projectOwner,
                 JBPermissionsData({
-                    operator: address(deployer), projectId: uint64(_defifaProjectId), permissionIds: permissionIds
-                })
+                operator: address(deployer), projectId: uint64(_defifaProjectId), permissionIds: permissionIds
+            })
             );
 
         hook.transferOwnership(address(deployer));
@@ -199,14 +199,14 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             vm.prank(users[i]);
             JBMultiTerminal(address(jbMultiTerminal()))
                 .cashOutTokensOf({
-                    holder: users[i],
-                    projectId: projectId,
-                    cashOutCount: 0,
-                    tokenToReclaim: JBConstants.NATIVE_TOKEN,
-                    minTokensReclaimed: 0,
-                    beneficiary: payable(users[i]),
-                    metadata: cashOutMetadata
-                });
+                holder: users[i],
+                projectId: projectId,
+                cashOutCount: 0,
+                tokenToReclaim: JBConstants.NATIVE_TOKEN,
+                minTokensReclaimed: 0,
+                beneficiary: payable(users[i]),
+                metadata: cashOutMetadata
+            });
 
             totalCashedOut += users[i].balance - balBefore;
         }
@@ -327,14 +327,14 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             vm.prank(users[i]);
             JBMultiTerminal(address(jbMultiTerminal()))
                 .cashOutTokensOf({
-                    holder: users[i],
-                    projectId: projectId,
-                    cashOutCount: 0,
-                    tokenToReclaim: JBConstants.NATIVE_TOKEN,
-                    minTokensReclaimed: 0,
-                    beneficiary: payable(users[i]),
-                    metadata: cashOutMetadata
-                });
+                holder: users[i],
+                projectId: projectId,
+                cashOutCount: 0,
+                tokenToReclaim: JBConstants.NATIVE_TOKEN,
+                minTokensReclaimed: 0,
+                beneficiary: payable(users[i]),
+                metadata: cashOutMetadata
+            });
 
             totalCashedOut += users[i].balance - balBefore;
         }

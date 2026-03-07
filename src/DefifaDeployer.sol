@@ -188,15 +188,11 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         IJBTerminal _terminal = controller.DIRECTORY().primaryTerminalOf({projectId: gameId, token: _token});
 
         // Get the accounting context for the project.
-        JBAccountingContext memory _context =
-            _terminal.accountingContextForTokenOf({projectId: gameId, token: _token});
+        JBAccountingContext memory _context = _terminal.accountingContextForTokenOf({projectId: gameId, token: _token});
 
         // Get the current balance.
-        uint256 _pot = IJBMultiTerminal(address(_terminal)).STORE().balanceOf({
-            terminal: address(_terminal),
-            projectId: gameId,
-            token: _token
-        });
+        uint256 _pot = IJBMultiTerminal(address(_terminal)).STORE()
+            .balanceOf({terminal: address(_terminal), projectId: gameId, token: _token});
 
         // Add any fulfilled commitments.
         if (includeCommitments) _pot += fulfilledCommitmentsOf[gameId];
@@ -251,11 +247,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // NO_CONTEST.
         if (_ops.minParticipation > 0) {
             IJBTerminal _terminal = controller.DIRECTORY().primaryTerminalOf({projectId: gameId, token: _ops.token});
-            uint256 _balance = IJBMultiTerminal(address(_terminal)).STORE().balanceOf({
-                terminal: address(_terminal),
-                projectId: gameId,
-                token: _ops.token
-            });
+            uint256 _balance = IJBMultiTerminal(address(_terminal)).STORE()
+                .balanceOf({terminal: address(_terminal), projectId: gameId, token: _ops.token});
             if (_balance < _ops.minParticipation) return DefifaGamePhase.NO_CONTEST;
         }
 
@@ -379,9 +372,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
                 // This contract must have SET_SPLIT_GROUPS permission from the defifa project owner.
                 controller.setSplitGroupsOf({
-                    projectId: defifaProjectId,
-                    rulesetId: gameId,
-                    splitGroups: _groupedSplits
+                    projectId: defifaProjectId, rulesetId: gameId, splitGroups: _groupedSplits
                 });
             }
         }
@@ -464,11 +455,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
 
         // Launch the Juicebox project.
-        uint256 _actualGameId = _launchGame({
-            launchProjectData: launchProjectData,
-            _gameId: gameId,
-            _dataHook: address(_hook)
-        });
+        uint256 _actualGameId =
+            _launchGame({launchProjectData: launchProjectData, _gameId: gameId, _dataHook: address(_hook)});
 
         // Revert if the game ID does not match (e.g. front-run by another project creation).
         if (gameId != _actualGameId) revert DefifaDeployer_InvalidGameConfiguration();
@@ -569,9 +557,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // Update the ruleset to the final one.
         controller.queueRulesetsOf({
-            projectId: gameId,
-            rulesetConfigurations: rulesetConfigs,
-            memo: "Defifa game has finished."
+            projectId: gameId, rulesetConfigurations: rulesetConfigs, memo: "Defifa game has finished."
         });
 
         emit FulfilledCommitments({gameId: gameId, pot: _pot, caller: msg.sender});
@@ -636,9 +622,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // Queue the no-contest refund ruleset.
         controller.queueRulesetsOf({
-            projectId: gameId,
-            rulesetConfigurations: rulesetConfigs,
-            memo: "Defifa game: no contest."
+            projectId: gameId, rulesetConfigurations: rulesetConfigs, memo: "Defifa game: no contest."
         });
 
         emit QueuedNoContest(gameId, msg.sender);

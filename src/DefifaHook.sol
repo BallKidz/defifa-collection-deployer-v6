@@ -353,11 +353,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(context.projectId);
 
         // Calculate the amount paid to mint the tokens that are being burned.
-        uint256 _cumulativeMintPrice = DefifaHookLib.computeCumulativeMintPrice({
-            tokenIds: decodedTokenIds,
-            _store: store,
-            hook: address(this)
-        });
+        uint256 _cumulativeMintPrice =
+            DefifaHookLib.computeCumulativeMintPrice({tokenIds: decodedTokenIds, _store: store, hook: address(this)});
 
         // Use this contract as the only cash out hook.
         hookSpecifications = new JBCashOutHookSpecification[](1);
@@ -621,8 +618,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
         // interaction with the correct project.
         if (
-            msg.value != 0
-                || !DIRECTORY.isTerminalOf({projectId: PROJECT_ID, terminal: IJBTerminal(msg.sender)})
+            msg.value != 0 || !DIRECTORY.isTerminalOf({projectId: PROJECT_ID, terminal: IJBTerminal(msg.sender)})
                 || context.projectId != PROJECT_ID
         ) revert JB721Hook_InvalidCashOut();
 
@@ -680,9 +676,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
             // Claim the $DEFIFA and $NANA tokens for the user.
             _beneficiaryReceivedTokens = _claimTokensFor({
-                _beneficiary: context.holder,
-                shareToBeneficiary: _cumulativeMintPrice,
-                outOfTotal: _totalMintCost
+                _beneficiary: context.holder, shareToBeneficiary: _cumulativeMintPrice, outOfTotal: _totalMintCost
             });
         }
 
@@ -782,11 +776,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
         // Compute attestation units per unique tier (validates ascending order, reverts on bad order).
         (uint256[] memory _tierIds, uint256[] memory _attestationAmounts, uint256 _uniqueTierCount) =
-            DefifaHookLib.computeAttestationUnits({
-                _tierIdsToMint: _tierIdsToMint,
-                _store: store,
-                hook: address(this)
-            });
+            DefifaHookLib.computeAttestationUnits({_tierIdsToMint: _tierIdsToMint, _store: store, hook: address(this)});
 
         // Apply attestation units for each unique tier.
         for (uint256 _i; _i < _uniqueTierCount;) {
@@ -804,10 +794,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
                 // Transfer the attestation units.
                 _transferTierAttestationUnits({
-                    _from: address(0),
-                    _to: context.payer,
-                    _tierId: _tierId,
-                    _amount: _attestationAmounts[_i]
+                    _from: address(0), _to: context.payer, _tierId: _tierId, _amount: _attestationAmounts[_i]
                 });
             }
 
@@ -817,11 +804,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         }
 
         // Mint tiers if they were specified.
-        uint256 _leftoverAmount = _mintAll({
-            _amount: context.amount.value,
-            _mintTierIds: _tierIdsToMint,
-            _beneficiary: context.beneficiary
-        });
+        uint256 _leftoverAmount =
+            _mintAll({_amount: context.amount.value, _mintTierIds: _tierIdsToMint, _beneficiary: context.beneficiary});
 
         // Make sure the buyer isn't overspending.
         if (_leftoverAmount != 0) revert DefifaHook_Overspending();
