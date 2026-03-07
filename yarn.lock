@@ -88,10 +88,10 @@
   resolved "https://registry.npmjs.org/@babel/runtime/-/runtime-7.28.6.tgz"
   integrity sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==
 
-"@bananapus/721-hook-v6@^0.0.7":
-  version "0.0.7"
-  resolved "https://registry.npmjs.org/@bananapus/721-hook-v6/-/721-hook-v6-0.0.7.tgz"
-  integrity sha512-nU5vEmCz+C3jY1HlHPwex8gPgUQ3a0h08Uy/wsSG/qxgACC+5I1hCTo0wyYUBQES5Dck1tbnTyx/uW5Bn7Iodw==
+"@bananapus/721-hook-v6@^0.0.8":
+  version "0.0.8"
+  resolved "https://registry.npmjs.org/@bananapus/721-hook-v6/-/721-hook-v6-0.0.8.tgz"
+  integrity sha512-oUCadyKINi+nlMql298RSTEXYSirNlo/PbAZdzTnpgMuvEmpZsyBJm/R5n5NrmSLxqB5eSXdpUvsmCo8B2rjog==
   dependencies:
     "@bananapus/address-registry-v6" "^0.0.3"
     "@bananapus/core-v6" "^0.0.5"

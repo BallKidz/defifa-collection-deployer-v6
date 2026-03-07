@@ -596,15 +596,16 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
 
         vm.prank(_user);
-        JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
-            holder: _user,
-            projectId: _projectId,
-            cashOutCount: 0,
-            tokenToReclaim: JBConstants.NATIVE_TOKEN,
-            minTokensReclaimed: 0,
-            beneficiary: payable(_user),
-            metadata: cashOutMetadata
-        });
+        JBMultiTerminal(address(jbMultiTerminal()))
+            .cashOutTokensOf({
+                holder: _user,
+                projectId: _projectId,
+                cashOutCount: 0,
+                tokenToReclaim: JBConstants.NATIVE_TOKEN,
+                minTokensReclaimed: 0,
+                beneficiary: payable(_user),
+                metadata: cashOutMetadata
+            });
 
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user), _nanaBalance + _receiveNana);
         assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(_user), _defifaBalance + _receiveDefifa);
