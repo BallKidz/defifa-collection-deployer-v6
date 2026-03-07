@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 import {ITypeface, Font} from "lib/typeface/contracts/interfaces/ITypeface.sol";
 

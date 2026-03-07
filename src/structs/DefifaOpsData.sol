@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 /// @custom:member token The token being used by the game.
 /// @custom:member start The time at which the game should start, measured in seconds.

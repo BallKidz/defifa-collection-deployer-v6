@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IJBCashOutHook} from "@bananapus/core-v6/src/interfaces/IJBCashOutHook.sol";
+import {IJBDirectory} from "@bananapus/core-v6/src/interfaces/IJBDirectory.sol";
+import {IJBPayHook} from "@bananapus/core-v6/src/interfaces/IJBPayHook.sol";
+import {IJBRulesetDataHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetDataHook.sol";
 import {IJBRulesets} from "@bananapus/core-v6/src/interfaces/IJBRulesets.sol";
-import {IJB721Hook} from "@bananapus/721-hook-v6/src/interfaces/IJB721Hook.sol";
 import {IJB721TiersHookStore} from "@bananapus/721-hook-v6/src/interfaces/IJB721TiersHookStore.sol";
 import {IJB721TokenUriResolver} from "@bananapus/721-hook-v6/src/interfaces/IJB721TokenUriResolver.sol";
 import {JB721TiersMintReservesConfig} from "@bananapus/721-hook-v6/src/structs/JB721TiersMintReservesConfig.sol";
@@ -15,7 +18,15 @@ import {IDefifaGamePotReporter} from "./IDefifaGamePotReporter.sol";
 
 /// @notice The hook interface for Defifa games, extending the 721 hook with game-specific attestation delegation,
 /// scorecard-based cash out weights, and token claiming.
-interface IDefifaHook is IJB721Hook {
+interface IDefifaHook is IJBRulesetDataHook, IJBPayHook, IJBCashOutHook {
+    /// @notice The directory of terminals and controllers for projects.
+    function DIRECTORY() external view returns (IJBDirectory);
+
+    /// @notice The ID used when parsing metadata.
+    function METADATA_ID_TARGET() external view returns (address);
+
+    /// @notice The ID of the project that this contract is associated with.
+    function PROJECT_ID() external view returns (uint256);
     event Mint(
         uint256 indexed tokenId,
         uint256 indexed tierId,

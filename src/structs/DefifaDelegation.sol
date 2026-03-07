@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 /// @custom:member delegatee The account to delegate tier voting units to.
 /// @custom:member tierId The ID of the tier to delegate voting units for.

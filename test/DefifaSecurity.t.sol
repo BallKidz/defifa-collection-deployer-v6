@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 import "forge-std/Test.sol";
 import "../src/DefifaGovernor.sol";
@@ -16,10 +16,19 @@ import "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
 import "@bananapus/721-hook-v6/src/libraries/JB721TiersRulesetMetadataResolver.sol";
 import "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
 
+/// @dev Helper to read block.timestamp via an external call, bypassing the via-ir optimizer's timestamp caching.
+contract TimestampReader {
+    function timestamp() external view returns (uint256) {
+        return block.timestamp;
+    }
+}
+
 /// @title DefifaSecurityTest
 /// @notice High-volume game integrity, fund conservation, scorecard validation, and governance tests.
 contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
     using JBRulesetMetadataResolver for JBRuleset;
+
+    TimestampReader private _tsReader = new TimestampReader();
 
     address _protocolFeeProjectTokenAccount;
     address _defifaProjectTokenAccount;
@@ -360,10 +369,10 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
         _users[1] = _addr(1);
         _mint(_users[0], 1, 1 ether);
         _delegateSelf(_users[0], 1);
-        vm.warp(block.timestamp + 1);
+        vm.warp(_tsReader.timestamp() + 1);
         _mint(_users[1], 2, 1 ether);
         _delegateSelf(_users[1], 2);
-        vm.warp(block.timestamp + 1);
+        vm.warp(_tsReader.timestamp() + 1);
 
         // Move to scoring phase (reserves can only be minted here)
         _toScoring();
@@ -396,14 +405,14 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
         allUsers[2] = _reserveAddr;
 
         uint256 pid = _gov.submitScorecardFor(_gameId, sc);
-        vm.warp(block.timestamp + _gov.attestationStartTimeOf(_gameId) + 1);
+        vm.warp(_tsReader.timestamp() + _gov.attestationStartTimeOf(_gameId) + 1);
         for (uint256 i; i < allUsers.length; i++) {
             vm.prank(allUsers[i]);
             _gov.attestToScorecardFrom(_gameId, pid);
         }
-        vm.warp(block.timestamp + _gov.attestationGracePeriodOf(_gameId) + 1);
+        vm.warp(_tsReader.timestamp() + _gov.attestationGracePeriodOf(_gameId) + 1);
         _gov.ratifyScorecardFrom(_gameId, sc);
-        vm.warp(block.timestamp + 1);
+        vm.warp(_tsReader.timestamp() + 1);
 
         // Cash out paid minters
         _cashOut(_users[0], 1, 1);
@@ -551,7 +560,7 @@ contract DefifaSecurityTest is JBTest, TestBaseWorkflow {
 
     function _toScoring() internal {
         // Warp 3 days forward (past mint + refund) into scoring
-        vm.warp(block.timestamp + 3 days + 1);
+        vm.warp(_tsReader.timestamp() + 3 days + 1);
     }
 
     // =========================================================================

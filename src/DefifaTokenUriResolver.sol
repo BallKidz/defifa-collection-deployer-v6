@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 import {Base64} from "lib/base64/base64.sol";
 import {mulDiv} from "@prb/math/src/Common.sol";

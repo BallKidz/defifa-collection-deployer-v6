@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 import {mulDiv} from "@prb/math/src/Common.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -410,7 +410,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 transfersPausable: false,
                 useVotingUnits: false,
                 cannotBeRemoved: true,
-                cannotIncreaseDiscountPercent: true
+                cannotIncreaseDiscountPercent: true,
+                splitPercent: 0,
+                splits: new JBSplit[](0)
             });
 
             // Set the name.

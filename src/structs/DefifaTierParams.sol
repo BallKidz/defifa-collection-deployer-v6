@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 /// @custom:member name The name of the tier.
 /// @custom:member reservedRate The number of minted tokens needed in the tier to allow for minting another reserved

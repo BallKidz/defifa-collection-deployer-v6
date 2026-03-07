@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -14,7 +14,10 @@ import {JBAfterPayRecordedContext} from "@bananapus/core-v6/src/structs/JBAfterP
 import {JBBeforeCashOutRecordedContext} from "@bananapus/core-v6/src/structs/JBBeforeCashOutRecordedContext.sol";
 import {JBCashOutHookSpecification} from "@bananapus/core-v6/src/structs/JBCashOutHookSpecification.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
-import {JB721Hook} from "@bananapus/721-hook-v6/src/abstract/JB721Hook.sol";
+import {ERC721} from "@bananapus/721-hook-v6/src/abstract/ERC721.sol";
+import {IJBPayHook} from "@bananapus/core-v6/src/interfaces/IJBPayHook.sol";
+import {JBPayHookSpecification} from "@bananapus/core-v6/src/structs/JBPayHookSpecification.sol";
+import {JBBeforePayRecordedContext} from "@bananapus/core-v6/src/structs/JBBeforePayRecordedContext.sol";
 import {IJB721TiersHookStore} from "@bananapus/721-hook-v6/src/interfaces/IJB721TiersHookStore.sol";
 import {IJB721TokenUriResolver} from "@bananapus/721-hook-v6/src/interfaces/IJB721TokenUriResolver.sol";
 import {
@@ -37,7 +40,7 @@ import {DefifaHookLib} from "./libraries/DefifaHookLib.sol";
 
 /// @title DefifaHook
 /// @notice A hook that transforms Juicebox treasury interactions into a Defifa game.
-contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
+contract DefifaHook is ERC721, Ownable, IDefifaHook {
     using Checkpoints for Checkpoints.Trace208;
 
     //*********************************************************************//
@@ -59,6 +62,26 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     error DefifaHook_ReservedTokenMintingPaused();
     error DefifaHook_TransfersPaused();
     error DefifaHook_Unauthorized(uint256 tokenId, address owner, address caller);
+    error JB721Hook_InvalidCashOut();
+    error JB721Hook_InvalidPay();
+    error JB721Hook_UnexpectedTokenCashedOut();
+
+    //*********************************************************************//
+    // --------------- public immutable stored properties ---------------- //
+    //*********************************************************************//
+
+    /// @notice The directory of terminals and controllers for projects.
+    IJBDirectory public immutable override DIRECTORY;
+
+    /// @notice The ID used when parsing metadata.
+    address public immutable override METADATA_ID_TARGET;
+
+    //*********************************************************************//
+    // -------------------- public stored properties --------------------- //
+    //*********************************************************************//
+
+    /// @notice The ID of the project that this contract is associated with.
+    uint256 public override PROJECT_ID;
 
     //*********************************************************************//
     // --------------------- public constant properties ------------------ //
@@ -258,7 +281,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         public
         view
         virtual
-        override
         returns (uint256 cumulativeWeight)
     {
         cumulativeWeight = DefifaHookLib.computeCashOutWeightBatch({
@@ -296,7 +318,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         public
         view
         virtual
-        override
         returns (uint256)
     {
         return TOTAL_CASHOUT_WEIGHT;
@@ -329,7 +350,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         public
         view
         virtual
-        override(IJBRulesetDataHook, JB721Hook)
+        override
         returns (
             uint256 cashOutTaxRate,
             uint256 cashOutCount,
@@ -402,8 +423,10 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// @notice Indicates if this contract adheres to the specified interface.
     /// @dev See {IERC165-supportsInterface}.
     /// @param interfaceId The ID of the interface to check for adherence to.
-    function supportsInterface(bytes4 interfaceId) public view override(IERC165, JB721Hook) returns (bool) {
-        return interfaceId == type(IDefifaHook).interfaceId || JB721Hook.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, IERC165) returns (bool) {
+        return interfaceId == type(IDefifaHook).interfaceId || interfaceId == type(IJBRulesetDataHook).interfaceId
+            || interfaceId == type(IJBPayHook).interfaceId || interfaceId == type(IJBCashOutHook).interfaceId
+            || super.supportsInterface(interfaceId);
     }
 
     //*********************************************************************//
@@ -417,11 +440,60 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         IERC20 _baseProtocolToken
     )
         Ownable(msg.sender)
-        JB721Hook(_directory)
     {
+        DIRECTORY = _directory;
+        METADATA_ID_TARGET = address(this);
         codeOrigin = address(this);
         defifaToken = _defifaToken;
         baseProtocolToken = _baseProtocolToken;
+    }
+
+    //*********************************************************************//
+    // ------------------------- external views -------------------------- //
+    //*********************************************************************//
+
+    /// @notice The data calculated before a payment is recorded in the terminal store.
+    /// @dev Sets this contract as the pay hook. Part of `IJBRulesetDataHook`.
+    /// @param context The payment context passed to this contract by the `pay(...)` function.
+    /// @return weight The new `weight` to use, overriding the ruleset's `weight`.
+    /// @return hookSpecifications The amount and data to send to pay hooks (this contract).
+    function beforePayRecordedWith(JBBeforePayRecordedContext calldata context)
+        public
+        view
+        virtual
+        override
+        returns (uint256 weight, JBPayHookSpecification[] memory hookSpecifications)
+    {
+        weight = context.weight;
+        hookSpecifications = new JBPayHookSpecification[](1);
+        hookSpecifications[0] = JBPayHookSpecification({hook: this, amount: 0, metadata: bytes("")});
+    }
+
+    /// @notice Required by the IJBRulesetDataHook interfaces. Return false to not leak any permissions.
+    function hasMintPermissionFor(uint256, JBRuleset memory, address) external pure returns (bool) {
+        return false;
+    }
+
+    //*********************************************************************//
+    // ---------------------- external transactions ---------------------- //
+    //*********************************************************************//
+
+    /// @notice Mints one or more NFTs to the `context.beneficiary` upon payment if conditions are met.
+    /// @dev Reverts if the calling contract is not one of the project's terminals.
+    /// @param context The payment context passed in by the terminal.
+    // slither-disable-next-line locked-ether
+    function afterPayRecordedWith(JBAfterPayRecordedContext calldata context) external payable virtual override {
+        uint256 projectId = PROJECT_ID;
+
+        // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
+        // interaction with the correct project.
+        if (
+            msg.value != 0 || !DIRECTORY.isTerminalOf({projectId: projectId, terminal: IJBTerminal(msg.sender)})
+                || context.projectId != projectId
+        ) revert JB721Hook_InvalidPay();
+
+        // Process the payment.
+        _processPayment(context);
     }
 
     //*********************************************************************//
@@ -469,7 +541,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         if (address(store) != address(0)) revert();
 
         // Initialize the superclass.
-        JB721Hook._initialize({projectId: _gameId, name: _name, symbol: _symbol});
+        ERC721._initialize({name_: _name, symbol_: _symbol});
+        PROJECT_ID = _gameId;
 
         // Store stuff.
         rulesets = _rulesets;
@@ -615,7 +688,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         external
         payable
         virtual
-        override(IJBCashOutHook, JB721Hook)
+        override
     {
         // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
         // interaction with the correct project.
@@ -755,7 +828,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
     /// @notice Process an incoming payment.
     /// @param context The Juicebox standard project payment data.
-    function _processPayment(JBAfterPayRecordedContext calldata context) internal override {
+    function _processPayment(JBAfterPayRecordedContext calldata context) internal {
         // Make sure the game is being played in the correct currency.
         if (context.amount.currency != pricingCurrency) revert DefifaHook_WrongCurrency();
 
@@ -916,7 +989,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
     /// @notice A function that will run when tokens are burned via cashOut.
     /// @param _tokenIds The IDs of the tokens that were burned.
-    function _didBurn(uint256[] memory _tokenIds) internal virtual override {
+    function _didBurn(uint256[] memory _tokenIds) internal virtual {
         // Add to burned counter.
         store.recordBurn(_tokenIds);
     }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 // solhint-disable-next-line no-unused-import
 import "forge-std/Test.sol";
@@ -31,8 +31,17 @@ import {DefifaLaunchProjectData} from "../src/structs/DefifaLaunchProjectData.so
 import {DefifaTierParams} from "../src/structs/DefifaTierParams.sol";
 import {DefifaTierCashOutWeight} from "../src/structs/DefifaTierCashOutWeight.sol";
 
+/// @dev Helper to read block.timestamp via an external call, bypassing the via-ir optimizer's timestamp caching.
+contract TimestampReader {
+    function timestamp() external view returns (uint256) {
+        return block.timestamp;
+    }
+}
+
 contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     using JBRulesetMetadataResolver for JBRuleset;
+
+    TimestampReader private _tsReader = new TimestampReader();
 
     address _protocolFeeProjectTokenAccount;
     address _defifaProjectTokenAccount;
@@ -403,10 +412,10 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             vm.prank(_users[i]);
             _nft.setTierDelegatesTo(tiered721SetDelegatesData);
             // Forward 1 block, user should receive all the voting power of the tier, as its the only NFT
-            vm.warp(block.timestamp + 1);
+            vm.warp(_tsReader.timestamp() + 1);
             assertEq(
                 _governor.MAX_ATTESTATION_POWER_TIER(),
-                _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp))
+                _governor.getAttestationWeight(_gameId, _users[i], uint48(_tsReader.timestamp()))
             );
         }
         // Warp to scoring phase (past start time)
@@ -421,14 +430,14 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
         // Forward time so voting becomes active
-        vm.warp(block.timestamp + _governor.attestationStartTimeOf(_gameId) + 1);
+        vm.warp(_tsReader.timestamp() + _governor.attestationStartTimeOf(_gameId) + 1);
         // We have only 40% vote on the proposal, making it still be below quorum.
         for (uint256 i = 0; i < _users.length * 4 / 10; i++) {
             vm.prank(_users[i]);
             _governor.attestToScorecardFrom(_gameId, _proposalId);
         }
         // Forward the amount of blocks needed to reach the end (and round up)
-        vm.warp(block.timestamp + _governor.attestationGracePeriodOf(_gameId) + 1);
+        vm.warp(_tsReader.timestamp() + _governor.attestationGracePeriodOf(_gameId) + 1);
         // Execute the proposal
         vm.expectRevert(DefifaGovernor.DefifaGovernor_NotAllowed.selector);
         _governor.ratifyScorecardFrom(_gameId, scorecards);
@@ -523,59 +532,33 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Move forward 1 block to start the new ruleset.
         vm.roll(block.number + 1);
 
+        _verifyCashOutsAndRedeem(
+            _projectId, _nft, scorecards, _users, _sumDistribution, distribution, assignedCashOutWeight
+        );
+    }
+
+    function _verifyCashOutsAndRedeem(
+        uint256 _projectId,
+        DefifaHook _nft,
+        DefifaTierCashOutWeight[] memory scorecards,
+        address[] memory _users,
+        uint256 _sumDistribution,
+        uint8[] calldata distribution,
+        uint256 assignedCashOutWeight
+    )
+        internal
+    {
         uint256 _pot = jbMultiTerminal()
             .currentSurplusOf(_projectId, jbMultiTerminal().accountingContextsOf(_projectId), 18, JBCurrencyIds.ETH);
         // Assert that the deployer did *NOT* receive any fee tokens.
-        // As of the v3 -> v5 migration, fee tokens should now be send directly to the hook.
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(deployer)), 0);
         assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(address(deployer)), 0);
 
         // Verify that the cashOutWeights actually changed
         for (uint256 i = 0; i < scorecards.length; i++) {
-            address _user = _users[i];
-            // Tier's are 1 indexed and should be stored 0 indexed.
-            assertEq(_nft.tierCashOutWeights()[i], scorecards[i].cashOutWeight);
-            // Craft the metadata: redeem the tokenId
-            bytes memory cashOutMetadata;
-            uint256 _receiveDefifa;
-            uint256 _receiveNana;
-            {
-                uint256[] memory cashOutId = new uint256[](1);
-                cashOutId[0] = _generateTokenId(i + 1, 1);
-                cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutId));
-
-                (_receiveDefifa, _receiveNana) = _nft.tokensClaimableFor(cashOutId);
-            }
-            uint256 _nanaBalance = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user);
-            uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
-
-            vm.prank(_user);
-            JBMultiTerminal(address(jbMultiTerminal()))
-                .cashOutTokensOf({
-                    holder: _user,
-                    projectId: _projectId,
-                    cashOutCount: 0,
-                    tokenToReclaim: JBConstants.NATIVE_TOKEN,
-                    minTokensReclaimed: 0,
-                    beneficiary: payable(_user),
-                    metadata: cashOutMetadata
-                });
-
-            // Assert that the user received some of the fee tokens.
-            assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user), _nanaBalance + _receiveNana);
-            assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(_user), _defifaBalance + _receiveDefifa);
-
-            if (scorecards[i].cashOutWeight == 0) continue;
-
-            // We calculate the expected output based on the given distribution and how much is in the pot
-            uint256 _expectedTierCashOut = _pot;
-            _expectedTierCashOut = (_expectedTierCashOut * distribution[i]) / _sumDistribution;
-            // Assert that our expected tier cashOut is ~equal to the actual amount
-            // Allowing for some rounding errors, max allowed error is 0.000001 ether
-            assertApproxEqRel(_expectedTierCashOut, _user.balance, 0.001 ether);
+            _verifySingleCashOut(_projectId, _nft, scorecards[i], _users[i], _pot, _sumDistribution, distribution, i);
         }
         // All NFTs should have been redeemed, only some dust should be left
-        // Max allowed dust is 0.0001
         uint256 remainingSurplus = jbMultiTerminal()
             .currentSurplusOf(_projectId, jbMultiTerminal().accountingContextsOf(_projectId), 18, JBCurrencyIds.ETH);
         uint256 _expected = _pot * (_nft.TOTAL_CASHOUT_WEIGHT() - assignedCashOutWeight) / _nft.TOTAL_CASHOUT_WEIGHT();
@@ -584,6 +567,55 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // There should be no fee tokens left in the hook.
         assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(address(_nft)), 0);
         assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(address(_nft)), 0);
+    }
+
+    function _verifySingleCashOut(
+        uint256 _projectId,
+        DefifaHook _nft,
+        DefifaTierCashOutWeight memory scorecard,
+        address _user,
+        uint256 _pot,
+        uint256 _sumDistribution,
+        uint8[] calldata distribution,
+        uint256 i
+    )
+        internal
+    {
+        assertEq(_nft.tierCashOutWeights()[i], scorecard.cashOutWeight);
+
+        bytes memory cashOutMetadata;
+        uint256 _receiveDefifa;
+        uint256 _receiveNana;
+        {
+            uint256[] memory cashOutId = new uint256[](1);
+            cashOutId[0] = _generateTokenId(i + 1, 1);
+            cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutId));
+            (_receiveDefifa, _receiveNana) = _nft.tokensClaimableFor(cashOutId);
+        }
+        uint256 _nanaBalance = IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user);
+        uint256 _defifaBalance = IERC20(_defifaProjectTokenAccount).balanceOf(_user);
+
+        vm.prank(_user);
+        JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
+            holder: _user,
+            projectId: _projectId,
+            cashOutCount: 0,
+            tokenToReclaim: JBConstants.NATIVE_TOKEN,
+            minTokensReclaimed: 0,
+            beneficiary: payable(_user),
+            metadata: cashOutMetadata
+        });
+
+        assertEq(IERC20(_protocolFeeProjectTokenAccount).balanceOf(_user), _nanaBalance + _receiveNana);
+        assertEq(IERC20(_defifaProjectTokenAccount).balanceOf(_user), _defifaBalance + _receiveDefifa);
+
+        if (scorecard.cashOutWeight == 0) return;
+
+        uint256 _expectedTierCashOut = _pot;
+        if (distribution.length > i) {
+            _expectedTierCashOut = (_expectedTierCashOut * distribution[i]) / _sumDistribution;
+        }
+        assertApproxEqRel(_expectedTierCashOut, _user.balance, 0.001 ether);
     }
 
     function testVotingPowerDecreasesAfterRefund() public {
@@ -1046,10 +1078,10 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             vm.prank(_users[i]);
             _nft.setTierDelegatesTo(tiered721SetDelegatesData);
             // Forward 1 block, user should receive all the voting power of the tier, as its the only NFT
-            vm.warp(block.timestamp + 1);
+            vm.warp(_tsReader.timestamp() + 1);
             assertEq(
                 _governor.MAX_ATTESTATION_POWER_TIER(),
-                _governor.getAttestationWeight(_gameId, _users[i], uint48(block.timestamp))
+                _governor.getAttestationWeight(_gameId, _users[i], uint48(_tsReader.timestamp()))
             );
         }
         // Warp to scoring phase (past start time)
@@ -1064,7 +1096,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
         // Forward time so proposals can be created
         uint256 _proposalId = _governor.submitScorecardFor(_gameId, scorecards);
         // Forward time so voting becomes active
-        vm.warp(block.timestamp + _governor.attestationStartTimeOf(_gameId));
+        vm.warp(_tsReader.timestamp() + _governor.attestationStartTimeOf(_gameId));
         // All the users vote
         for (uint256 i = 0; i < _users.length; i++) {
             vm.prank(_users[i]);

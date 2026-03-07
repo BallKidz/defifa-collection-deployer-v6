@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.26;
 
 /// @custom:member attestationsBegin The block at which attestations to the scorecard become allowed.
 /// @custom:member gracePeriodEnds The block at which the scorecard can become ratified.
