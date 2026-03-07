@@ -141,6 +141,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         DefifaScorecard memory _scorecard = _scorecardOf[gameId][scorecardId];
 
         // Make sure the proposal is known.
+        // slither-disable-next-line incorrect-equality
         if (_scorecard.attestationsBegin == 0) {
             revert DefifaGovernor_UnknownProposal();
         }
@@ -322,6 +323,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
 
         // Make sure the game has been initialized.
+        // slither-disable-next-line incorrect-equality
         if (_packedScorecardInfoOf[_gameId] == 0) revert DefifaGovernor_GameNotFound();
 
         // Make sure no weight is assigned to an unowned tier.
@@ -449,6 +451,7 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
 
         // Execute the scorecard via low-level call since the governor is the delegate's owner.
         (bool success, bytes memory returndata) = _metadata.dataHook.call(_calldata);
+        // slither-disable-next-line unused-return
         Address.verifyCallResult({success: success, returndata: returndata});
 
         // Fulfill any commitments for the game.

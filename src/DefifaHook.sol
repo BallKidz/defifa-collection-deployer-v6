@@ -608,7 +608,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// `context.beneficiary`. Part of `IJBCashOutHook`.
     /// @dev Reverts if the calling contract is not one of the project's terminals.
     /// @param context The cash out context passed in by the terminal.
-    // slither-disable-next-line locked-ether
+    // slither-disable-next-line locked-ether,reentrancy-no-eth
     function afterCashOutRecordedWith(JBAfterCashOutRecordedContext calldata context)
         external
         payable

@@ -207,6 +207,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // Get the game's current funding cycle along with its metadata.
         JBRuleset memory _currentRuleset = controller.RULESETS().currentOf(gameId);
         // Get the game's queued funding cycle along with its metadata.
+        // slither-disable-next-line unused-return
         (JBRuleset memory _queuedRuleset,) = controller.RULESETS().latestQueuedOf(gameId);
 
         // If the configurations are the same and the game hasn't ended, queueing is still needed.
@@ -319,6 +320,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Make sure the provided gameplay timestamps are sequential and that there is a mint duration.
+        // slither-disable-next-line incorrect-equality
         if (
             launchProjectData.mintPeriodDuration == 0
                 || launchProjectData.start
@@ -484,6 +486,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         if (fulfilledCommitmentsOf[gameId] != 0) return;
 
         // Get the game's current funding cycle along with its metadata.
+        // slither-disable-next-line unused-return
         (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
 
         // Make sure the game's commitments can be fulfilled.
@@ -498,6 +501,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // Get the current pot and store it. This also prevents re-entrance since the check above will return early.
         uint256 _pot = _terminal.STORE().balanceOf({terminal: address(_terminal), projectId: gameId, token: _token});
+        // slither-disable-next-line incorrect-equality
         if (_pot == 0) revert DefifaDeployer_NothingToFulfill();
 
         // Compute the fee amount based on the total absolute split percent stored at game creation.
@@ -508,6 +512,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         fulfilledCommitmentsOf[gameId] = _feeAmount > 0 ? _feeAmount : 1;
 
         // Send only the fee portion as payouts. The remaining balance stays as surplus for cash-outs.
+        // slither-disable-next-line unused-return
         _terminal.sendPayoutsOf({
             projectId: gameId,
             token: _token,
@@ -556,6 +561,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
 
         // Update the ruleset to the final one.
+        // slither-disable-next-line unused-return
         controller.queueRulesetsOf({
             projectId: gameId, rulesetConfigurations: rulesetConfigs, memo: "Defifa game has finished."
         });
