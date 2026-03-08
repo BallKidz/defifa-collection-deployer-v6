@@ -54,7 +54,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     error DefifaHook_NothingToClaim();
     error DefifaHook_NothingToMint();
     error DefifaHook_WrongCurrency();
-    error DefifaHook_NoContest();
     error DefifaHook_Overspending();
     error DefifaHook_CashoutWeightsAlreadySet();
     error DefifaHook_ReservedTokenMintingPaused();
@@ -609,11 +608,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
         // Make sure the cashOut weights haven't already been set.
         if (cashOutWeightIsSet) revert DefifaHook_CashoutWeightsAlreadySet();
-
-        // Make sure the game is not in no contest.
-        if (_gamePhase == DefifaGamePhase.NO_CONTEST) {
-            revert DefifaHook_NoContest();
-        }
 
         // Validate weights and build the array. Reverts on invalid input.
         _tierCashOutWeights =
