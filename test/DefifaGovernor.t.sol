@@ -939,7 +939,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             reservedTokenBeneficiary: address(0),
             encodedIPFSUri: bytes32(0), // this way we dont need more tokenUris
             shouldUseReservedTokenBeneficiaryAsDefault: false,
-            name: "DEFIFA"
+            name: "DEFIFA",
+            splits: new JBSplit[](0)
         });
 
         DefifaLaunchProjectData memory _launchData = DefifaLaunchProjectData({
@@ -948,6 +949,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             contractUri: "",
             baseUri: "",
             tierPrice: 1 ether,
+            tierSplitPercent: 0,
             token: JBAccountingContext({token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: JBCurrencyIds.ETH}),
             mintPeriodDuration: _mintPeriodDuration,
             start: _launchProjectAt + uint48(_mintPeriodDuration) + _inBetweenMintAndFifa,
@@ -1195,7 +1197,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
                 reservedTokenBeneficiary: address(0),
                 encodedIPFSUri: bytes32(0), // this way we dont need more tokenUris
                 shouldUseReservedTokenBeneficiaryAsDefault: false,
-                name: "DEFIFA"
+                name: "DEFIFA",
+                splits: new JBSplit[](0)
             });
         }
 
@@ -1205,6 +1208,7 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
             contractUri: "",
             baseUri: "",
             tierPrice: 1 ether,
+            tierSplitPercent: 0,
             token: JBAccountingContext({token: JBConstants.NATIVE_TOKEN, decimals: 18, currency: JBCurrencyIds.ETH}),
             mintPeriodDuration: 1 days,
             start: uint48(block.timestamp + 3 days),

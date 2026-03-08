@@ -785,7 +785,8 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
                 reservedTokenBeneficiary: address(0),
                 encodedIPFSUri: bytes32(0),
                 shouldUseReservedTokenBeneficiaryAsDefault: false,
-                name: "DEFIFA"
+                name: "DEFIFA",
+                splits: new JBSplit[](0)
             });
         }
         return DefifaLaunchProjectData({
@@ -803,6 +804,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
             attestationGracePeriod: 100_381,
             defaultAttestationDelegate: address(0),
             tierPrice: uint104(tierPrice),
+            tierSplitPercent: 0,
             tiers: tp,
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
             terminal: jbMultiTerminal(),

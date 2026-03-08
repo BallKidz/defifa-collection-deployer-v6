@@ -420,7 +420,8 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
                 reservedTokenBeneficiary: address(0),
                 encodedIPFSUri: bytes32(0),
                 shouldUseReservedTokenBeneficiaryAsDefault: false,
-                name: "DEFIFA"
+                name: "DEFIFA",
+                splits: new JBSplit[](0)
             });
         }
 
@@ -439,6 +440,7 @@ contract DefifaFeeAccountingTest is JBTest, TestBaseWorkflow {
             attestationGracePeriod: 100_381,
             defaultAttestationDelegate: address(0),
             tierPrice: uint104(1 ether),
+            tierSplitPercent: 0,
             tiers: tierParams,
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
             terminal: jbMultiTerminal(),
