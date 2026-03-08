@@ -363,8 +363,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         uint256 _timeUntilAttestationsBegin =
             block.timestamp > _attestationStartTime ? 0 : _attestationStartTime - block.timestamp;
 
-        _scorecard.attestationsBegin = uint48(block.timestamp + _timeUntilAttestationsBegin);
-        _scorecard.gracePeriodEnds = uint48(block.timestamp + attestationGracePeriodOf(_gameId));
+        uint48 _attestationsBegin = uint48(block.timestamp + _timeUntilAttestationsBegin);
+        _scorecard.attestationsBegin = _attestationsBegin;
+        // Grace period extends from when attestations begin, not from submission time.
+        // This prevents the grace period from expiring before attestations even start
+        // when a scorecard is submitted early.
+        _scorecard.gracePeriodEnds = uint48(_attestationsBegin + attestationGracePeriodOf(_gameId));
 
         // Keep a reference to the default attestation delegate.
         address _defaultAttestationDelegate = IDefifaHook(_metadata.dataHook).defaultAttestationDelegate();
