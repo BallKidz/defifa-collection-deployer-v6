@@ -66,6 +66,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     error DefifaDeployer_PhaseAlreadyQueued();
     error DefifaDeployer_SplitsDontAddUp();
     error DefifaDeployer_UnexpectedTerminalCurrency();
+    error DefifaDeployer_NotScoring();
 
     //*********************************************************************//
     // ----------------------- internal properties ----------------------- //
@@ -130,6 +131,10 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     /// @notice Whether the no-contest refund ruleset has been triggered for a game.
     /// @dev Once triggered, the game stays in NO_CONTEST and refunds are enabled.
     mapping(uint256 => bool) public noContestTriggeredFor;
+
+    /// @notice Whether the SCORING phase has been latched for a game.
+    /// @dev Once latched, the minParticipation check is skipped, preventing phase oscillation.
+    mapping(uint256 => bool) public scoringLatchedFor;
 
     //*********************************************************************//
     // ------------------------- external views -------------------------- //
@@ -245,8 +250,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         DefifaOpsData memory _ops = _opsOf[gameId];
 
         // Check minimum participation threshold: if the treasury balance is below the threshold, the game is
-        // NO_CONTEST.
-        if (_ops.minParticipation > 0) {
+        // NO_CONTEST. Skip this check if the scoring phase has been latched — once latched, the balance can drop
+        // below minParticipation (e.g. via cash-outs) without reverting to NO_CONTEST.
+        if (_ops.minParticipation > 0 && !scoringLatchedFor[gameId]) {
             IJBTerminal _terminal = controller.DIRECTORY().primaryTerminalOf({projectId: gameId, token: _ops.token});
             uint256 _balance = IJBMultiTerminal(address(_terminal)).STORE()
                 .balanceOf({terminal: address(_terminal), projectId: gameId, token: _ops.token});
@@ -636,6 +642,25 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
 
         emit QueuedNoContest(gameId, msg.sender);
+    }
+
+    /// @notice Latches the SCORING phase for a game, preventing phase oscillation.
+    /// @dev Anyone can call this once the game is in the SCORING phase and the minParticipation threshold is met.
+    /// Once latched, the balance can drop below minParticipation without the phase reverting to NO_CONTEST.
+    /// @param gameId The ID of the game to latch the scoring phase for.
+    function latchScoringPhaseFor(uint256 gameId) external override {
+        // Make sure the scoring phase hasn't already been latched.
+        if (scoringLatchedFor[gameId]) return;
+
+        // Make sure the game is currently in the SCORING phase (which implies minParticipation is met).
+        if (currentGamePhaseOf(gameId) != DefifaGamePhase.SCORING) {
+            revert DefifaDeployer_NotScoring();
+        }
+
+        // Latch the scoring phase.
+        scoringLatchedFor[gameId] = true;
+
+        emit ScoringPhaseLatched(gameId, msg.sender);
     }
 
     /// @notice Allows this contract to receive 721s.

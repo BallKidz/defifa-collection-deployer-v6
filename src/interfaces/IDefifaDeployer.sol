@@ -32,6 +32,8 @@ interface IDefifaDeployer {
 
     event DistributeToSplit(JBSplit split, uint256 amount, address caller);
 
+    event ScoringPhaseLatched(uint256 indexed gameId, address caller);
+
     /// @notice The split group ID used for distributing game pot funds.
     /// @return The split group.
     function splitGroup() external view returns (uint256);
@@ -105,4 +107,9 @@ interface IDefifaDeployer {
     /// @notice Trigger a no-contest outcome for a game.
     /// @param gameId The ID of the game.
     function triggerNoContestFor(uint256 gameId) external;
+
+    /// @notice Latch the SCORING phase for a game once the minParticipation threshold is met.
+    /// @dev Once latched, the balance can drop below minParticipation without reverting to NO_CONTEST.
+    /// @param gameId The ID of the game.
+    function latchScoringPhaseFor(uint256 gameId) external;
 }
