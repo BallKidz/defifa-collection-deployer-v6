@@ -224,16 +224,42 @@ library DefifaHookLib {
         }
     }
 
+    /// @notice Compute the cumulative retained mint price (mint price minus split amounts) for a set of token IDs.
+    /// @dev Used for refund calculations -- only the retained portion is refundable.
+    /// @param tokenIds The token IDs to compute the retained price for.
+    /// @param _store The 721 tiers hook store.
+    /// @param hook The hook address.
+    /// @return cumulativeRetainedPrice The total retained price across all tokens.
+    function computeCumulativeRetainedPrice(
+        uint256[] memory tokenIds,
+        IJB721TiersHookStore _store,
+        address hook
+    )
+        public
+        view
+        returns (uint256 cumulativeRetainedPrice)
+    {
+        uint256 _numberOfTokenIds = tokenIds.length;
+        for (uint256 _i; _i < _numberOfTokenIds; _i++) {
+            JB721Tier memory tier =
+                _store.tierOfTokenId({hook: hook, tokenId: tokenIds[_i], includeResolvedUri: false});
+            uint256 splitAmount =
+                tier.splitPercent != 0 ? mulDiv(tier.price, tier.splitPercent, JBConstants.SPLITS_TOTAL_PERCENT) : 0;
+            cumulativeRetainedPrice += tier.price - splitAmount;
+        }
+    }
+
     /// @notice Compute the cash out count for the beforeCashOutRecorded hook.
     /// @param gamePhase The current game phase.
-    /// @param cumulativeMintPrice The cumulative mint price of the tokens being cashed out.
+    /// @param cumulativeRetainedPrice The cumulative retained price (mint price minus split amounts) of the tokens being
+    /// cashed out.
     /// @param surplusValue The surplus value from the context.
     /// @param _amountRedeemed The amount already redeemed.
     /// @param cumulativeCashOutWeight The cumulative cash out weight of the tokens.
     /// @return cashOutCount The computed cash out count.
     function computeCashOutCount(
         DefifaGamePhase gamePhase,
-        uint256 cumulativeMintPrice,
+        uint256 cumulativeRetainedPrice,
         uint256 surplusValue,
         uint256 _amountRedeemed,
         uint256 cumulativeCashOutWeight
@@ -242,12 +268,12 @@ library DefifaHookLib {
         pure
         returns (uint256 cashOutCount)
     {
-        // If the game is in its minting, refund, or no-contest phase, reclaim amount is the same as it cost to mint.
+        // If the game is in its minting, refund, or no-contest phase, reclaim amount is the retained portion.
         if (
             gamePhase == DefifaGamePhase.MINT || gamePhase == DefifaGamePhase.REFUND
                 || gamePhase == DefifaGamePhase.NO_CONTEST
         ) {
-            cashOutCount = cumulativeMintPrice;
+            cashOutCount = cumulativeRetainedPrice;
         } else {
             // If the game is in its scoring or complete phase, reclaim amount is based on the tier weights.
             cashOutCount = mulDiv(surplusValue + _amountRedeemed, cumulativeCashOutWeight, TOTAL_CASHOUT_WEIGHT);

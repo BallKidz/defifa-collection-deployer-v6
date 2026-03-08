@@ -369,18 +369,21 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Get the current game phase.
         DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(context.projectId);
 
-        // Calculate the amount paid to mint the tokens that are being burned.
+        // Calculate the full mint price (for fee token distribution) and the retained price (for refunds).
         uint256 _cumulativeMintPrice =
             DefifaHookLib.computeCumulativeMintPrice({tokenIds: decodedTokenIds, _store: store, hook: address(this)});
+        uint256 _cumulativeRetainedPrice =
+            DefifaHookLib.computeCumulativeRetainedPrice({tokenIds: decodedTokenIds, _store: store, hook: address(this)});
 
-        // Use this contract as the only cash out hook.
+        // Use this contract as the only cash out hook. Pass the retained price since _totalMintCost tracks retained
+        // amounts.
         hookSpecifications = new JBCashOutHookSpecification[](1);
-        hookSpecifications[0] = JBCashOutHookSpecification(this, 0, abi.encode(_cumulativeMintPrice));
+        hookSpecifications[0] = JBCashOutHookSpecification(this, 0, abi.encode(_cumulativeRetainedPrice));
 
         // Compute the cash out count based on the game phase.
         cashOutCount = DefifaHookLib.computeCashOutCount({
             gamePhase: _gamePhase,
-            cumulativeMintPrice: _cumulativeMintPrice,
+            cumulativeRetainedPrice: _cumulativeRetainedPrice,
             surplusValue: context.surplus.value,
             _amountRedeemed: amountRedeemed,
             cumulativeCashOutWeight: cashOutWeightOf(decodedTokenIds)
