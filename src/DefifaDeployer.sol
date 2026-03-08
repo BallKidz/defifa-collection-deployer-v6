@@ -135,37 +135,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
-    /// @notice The game times.
-    /// @param gameId The ID of the game for which the game times apply.
-    /// @return The game's start time, as a unix timestamp.
-    /// @return The game's minting period duration, in seconds.
-    /// @return The game's refund period duration, in seconds.
-    function timesFor(uint256 gameId) external view override returns (uint48, uint24, uint24) {
-        DefifaOpsData memory _ops = _opsOf[gameId];
-        return (_ops.start, _ops.mintPeriodDuration, _ops.refundPeriodDuration);
-    }
-
-    /// @notice The token of a game.
-    /// @param gameId The ID of the game to get the token of.
-    /// @return The game's token.
-    function tokenOf(uint256 gameId) external view override returns (address) {
-        return _opsOf[gameId].token;
-    }
-
-    /// @notice The safety mechanism parameters of a game.
-    /// @param gameId The ID of the game to get the safety params of.
-    /// @return minParticipation The minimum treasury balance for the game to proceed to scoring.
-    /// @return scorecardTimeout The maximum time after scoring begins for a scorecard to be ratified.
-    function safetyParamsOf(uint256 gameId)
-        external
-        view
-        override
-        returns (uint256 minParticipation, uint32 scorecardTimeout)
-    {
-        DefifaOpsData memory _ops = _opsOf[gameId];
-        return (_ops.minParticipation, _ops.scorecardTimeout);
-    }
-
     /// @notice The current pot the game is being played with.
     /// @param gameId The ID of the game for which the pot applies.
     /// @param includeCommitments A flag indicating if the portion of the pot committed to fulfill preprogrammed
@@ -212,6 +181,37 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
 
         // If the configurations are the same and the game hasn't ended, queueing is still needed.
         return _currentRuleset.duration != 0 && _currentRuleset.id == _queuedRuleset.id;
+    }
+
+    /// @notice The safety mechanism parameters of a game.
+    /// @param gameId The ID of the game to get the safety params of.
+    /// @return minParticipation The minimum treasury balance for the game to proceed to scoring.
+    /// @return scorecardTimeout The maximum time after scoring begins for a scorecard to be ratified.
+    function safetyParamsOf(uint256 gameId)
+        external
+        view
+        override
+        returns (uint256 minParticipation, uint32 scorecardTimeout)
+    {
+        DefifaOpsData memory _ops = _opsOf[gameId];
+        return (_ops.minParticipation, _ops.scorecardTimeout);
+    }
+
+    /// @notice The game times.
+    /// @param gameId The ID of the game for which the game times apply.
+    /// @return The game's start time, as a unix timestamp.
+    /// @return The game's minting period duration, in seconds.
+    /// @return The game's refund period duration, in seconds.
+    function timesFor(uint256 gameId) external view override returns (uint48, uint24, uint24) {
+        DefifaOpsData memory _ops = _opsOf[gameId];
+        return (_ops.start, _ops.mintPeriodDuration, _ops.refundPeriodDuration);
+    }
+
+    /// @notice The token of a game.
+    /// @param gameId The ID of the game to get the token of.
+    /// @return The game's token.
+    function tokenOf(uint256 gameId) external view override returns (address) {
+        return _opsOf[gameId].token;
     }
 
     //*********************************************************************//
@@ -296,6 +296,96 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
     //*********************************************************************//
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
+
+    /// @notice Fulfill split amounts between all splits for a game.
+    /// @param gameId The ID of the game to fulfill splits for.
+    function fulfillCommitmentsOf(uint256 gameId) external virtual override {
+        // Make sure commitments haven't already been fulfilled.
+        if (fulfilledCommitmentsOf[gameId] != 0) return;
+
+        // Get the game's current funding cycle along with its metadata.
+        // slither-disable-next-line unused-return
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
+
+        // Make sure the game's commitments can be fulfilled.
+        if (!IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) {
+            revert DefifaDeployer_CantFulfillYet();
+        }
+
+        // Get the game token and the terminal.
+        address _token = _opsOf[gameId].token;
+        IJBMultiTerminal _terminal =
+            IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf({projectId: gameId, token: _token})));
+
+        // Get the current pot and store it. This also prevents re-entrance since the check above will return early.
+        uint256 _pot = _terminal.STORE().balanceOf({terminal: address(_terminal), projectId: gameId, token: _token});
+        // slither-disable-next-line incorrect-equality
+        if (_pot == 0) revert DefifaDeployer_NothingToFulfill();
+
+        // Compute the fee amount based on the total absolute split percent stored at game creation.
+        uint256 _feeAmount = mulDiv(_pot, _commitmentPercentOf[gameId], JBConstants.SPLITS_TOTAL_PERCENT);
+
+        // Store the actual fee amount for accurate currentGamePotOf reporting.
+        // Use max(feeAmount, 1) to preserve the reentrancy guard when pot is 0.
+        fulfilledCommitmentsOf[gameId] = _feeAmount > 0 ? _feeAmount : 1;
+
+        // Send only the fee portion as payouts. The remaining balance stays as surplus for cash-outs.
+        // slither-disable-next-line unused-return
+        _terminal.sendPayoutsOf({
+            projectId: gameId,
+            token: _token,
+            amount: _feeAmount,
+            currency: _token == JBConstants.NATIVE_TOKEN ? _metadata.baseCurrency : uint32(uint160(_token)),
+            minTokensPaidOut: _feeAmount
+        });
+
+        // Queue the final ruleset.
+        JBRulesetConfig[] memory rulesetConfigs = new JBRulesetConfig[](1);
+        rulesetConfigs[0] = JBRulesetConfig({
+            mustStartAtOrAfter: 0,
+            duration: 0,
+            weight: 0,
+            weightCutPercent: 0,
+            approvalHook: IJBRulesetApprovalHook(address(0)),
+            metadata: JBRulesetMetadata({
+                reservedPercent: 0,
+                cashOutTaxRate: 0,
+                baseCurrency: _metadata.baseCurrency,
+                pausePay: true,
+                pauseCreditTransfers: false,
+                allowOwnerMinting: false,
+                allowSetCustomToken: false,
+                allowTerminalMigration: false,
+                allowSetTerminals: false,
+                allowSetController: false,
+                allowAddAccountingContext: false,
+                allowAddPriceFeed: false,
+                // Set this to true so only the deployer can fulfill the commitments.
+                ownerMustSendPayouts: true,
+                holdFees: false,
+                useTotalSurplusForCashOuts: false,
+                useDataHookForPay: true,
+                useDataHookForCashOut: true,
+                dataHook: _metadata.dataHook,
+                metadata: uint16(
+                    JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
+                        JB721TiersRulesetMetadata({pauseTransfers: false, pauseMintPendingReserves: false})
+                    )
+                )
+            }),
+            // No more payouts.
+            splitGroups: new JBSplitGroup[](0),
+            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0)
+        });
+
+        // Update the ruleset to the final one.
+        // slither-disable-next-line unused-return
+        controller.queueRulesetsOf({
+            projectId: gameId, rulesetConfigurations: rulesetConfigs, memo: "Defifa game has finished."
+        });
+
+        emit FulfilledCommitments({gameId: gameId, pot: _pot, caller: msg.sender});
+    }
 
     /// @notice Launches a new game owned by this contract with a DefifaHook attached.
     /// @param launchProjectData Data necessary to fulfill the transaction to launch a game.
@@ -482,94 +572,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         emit LaunchGame(gameId, _hook, governor, _uriResolver, msg.sender);
     }
 
-    /// @notice Fulfill split amounts between all splits for a game.
-    /// @param gameId The ID of the game to fulfill splits for.
-    function fulfillCommitmentsOf(uint256 gameId) external virtual override {
-        // Make sure commitments haven't already been fulfilled.
-        if (fulfilledCommitmentsOf[gameId] != 0) return;
-
-        // Get the game's current funding cycle along with its metadata.
-        // slither-disable-next-line unused-return
-        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
-
-        // Make sure the game's commitments can be fulfilled.
-        if (!IDefifaHook(_metadata.dataHook).cashOutWeightIsSet()) {
-            revert DefifaDeployer_CantFulfillYet();
-        }
-
-        // Get the game token and the terminal.
-        address _token = _opsOf[gameId].token;
-        IJBMultiTerminal _terminal =
-            IJBMultiTerminal(address(controller.DIRECTORY().primaryTerminalOf({projectId: gameId, token: _token})));
-
-        // Get the current pot and store it. This also prevents re-entrance since the check above will return early.
-        uint256 _pot = _terminal.STORE().balanceOf({terminal: address(_terminal), projectId: gameId, token: _token});
-        // slither-disable-next-line incorrect-equality
-        if (_pot == 0) revert DefifaDeployer_NothingToFulfill();
-
-        // Compute the fee amount based on the total absolute split percent stored at game creation.
-        uint256 _feeAmount = mulDiv(_pot, _commitmentPercentOf[gameId], JBConstants.SPLITS_TOTAL_PERCENT);
-
-        // Store the actual fee amount for accurate currentGamePotOf reporting.
-        // Use max(feeAmount, 1) to preserve the reentrancy guard when pot is 0.
-        fulfilledCommitmentsOf[gameId] = _feeAmount > 0 ? _feeAmount : 1;
-
-        // Send only the fee portion as payouts. The remaining balance stays as surplus for cash-outs.
-        // slither-disable-next-line unused-return
-        _terminal.sendPayoutsOf({
-            projectId: gameId,
-            token: _token,
-            amount: _feeAmount,
-            currency: _token == JBConstants.NATIVE_TOKEN ? _metadata.baseCurrency : uint32(uint160(_token)),
-            minTokensPaidOut: _feeAmount
-        });
-
-        // Queue the final ruleset.
-        JBRulesetConfig[] memory rulesetConfigs = new JBRulesetConfig[](1);
-        rulesetConfigs[0] = JBRulesetConfig({
-            mustStartAtOrAfter: 0,
-            duration: 0,
-            weight: 0,
-            weightCutPercent: 0,
-            approvalHook: IJBRulesetApprovalHook(address(0)),
-            metadata: JBRulesetMetadata({
-                reservedPercent: 0,
-                cashOutTaxRate: 0,
-                baseCurrency: _metadata.baseCurrency,
-                pausePay: true,
-                pauseCreditTransfers: false,
-                allowOwnerMinting: false,
-                allowSetCustomToken: false,
-                allowTerminalMigration: false,
-                allowSetTerminals: false,
-                allowSetController: false,
-                allowAddAccountingContext: false,
-                allowAddPriceFeed: false,
-                // Set this to true so only the deployer can fulfill the commitments.
-                ownerMustSendPayouts: true,
-                holdFees: false,
-                useTotalSurplusForCashOuts: false,
-                useDataHookForPay: true,
-                useDataHookForCashOut: true,
-                dataHook: _metadata.dataHook,
-                metadata: uint16(
-                    JB721TiersRulesetMetadataResolver.pack721TiersRulesetMetadata(
-                        JB721TiersRulesetMetadata({pauseTransfers: false, pauseMintPendingReserves: false})
-                    )
-                )
-            }),
-            // No more payouts.
-            splitGroups: new JBSplitGroup[](0),
-            fundAccessLimitGroups: new JBFundAccessLimitGroup[](0)
-        });
-
-        // Update the ruleset to the final one.
-        // slither-disable-next-line unused-return
-        controller.queueRulesetsOf({
-            projectId: gameId, rulesetConfigurations: rulesetConfigs, memo: "Defifa game has finished."
-        });
-
-        emit FulfilledCommitments({gameId: gameId, pot: _pot, caller: msg.sender});
+    /// @notice Allows this contract to receive 721s.
+    function onERC721Received(address, address, uint256, bytes calldata) external pure override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 
     /// @notice Triggers the no-contest refund mechanism for a game.
@@ -637,11 +642,6 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         });
 
         emit QueuedNoContest(gameId, msg.sender);
-    }
-
-    /// @notice Allows this contract to receive 721s.
-    function onERC721Received(address, address, uint256, bytes calldata) external pure override returns (bytes4) {
-        return IERC721Receiver.onERC721Received.selector;
     }
 
     //*********************************************************************//

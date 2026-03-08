@@ -123,49 +123,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     // -------------------------- public views --------------------------- //
     //*********************************************************************//
 
-    /// @notice The state of a proposal.
-    /// @param gameId The ID of the game to get a proposal state of.
-    /// @param scorecardId The ID of the proposal to get the state of.
-    /// @return The state.
-    /// @dev Boundary semantics (inclusive):
-    ///   - At exactly `attestationsBegin`, the state transitions from PENDING to ACTIVE (attestations are open).
-    ///   - At exactly `gracePeriodEnds`, the grace period has elapsed and the state transitions from ACTIVE to
-    ///     SUCCEEDED (if quorum is met) or remains ACTIVE (if not).
-    function stateOf(uint256 gameId, uint256 scorecardId) public view virtual override returns (DefifaScorecardState) {
-        // Keep a reference to the ratified scorecard ID.
-        uint256 _ratifiedScorecardId = ratifiedScorecardIdOf[gameId];
-
-        // If the game has already ratified a scorecard, return succeeded if the ratified proposal is being checked.
-        // Else return defeated.
-        if (_ratifiedScorecardId != 0) {
-            return _ratifiedScorecardId == scorecardId ? DefifaScorecardState.RATIFIED : DefifaScorecardState.DEFEATED;
-        }
-
-        // Get a reference to the scorecard.
-        DefifaScorecard memory _scorecard = _scorecardOf[gameId][scorecardId];
-
-        // Make sure the proposal is known.
-        // slither-disable-next-line incorrect-equality
-        if (_scorecard.attestationsBegin == 0) {
-            revert DefifaGovernor_UnknownProposal();
-        }
-
-        // If the scorecard has attestations beginning in the future, the state is PENDING.
-        // At exactly `attestationsBegin`, attestations are open so the state is ACTIVE.
-        if (_scorecard.attestationsBegin > block.timestamp) {
-            return DefifaScorecardState.PENDING;
-        }
-
-        // If the scorecard's grace period has not yet ended, the state is ACTIVE.
-        // At exactly `gracePeriodEnds`, the grace period has elapsed so we fall through to the quorum check.
-        if (_scorecard.gracePeriodEnds > block.timestamp) {
-            return DefifaScorecardState.ACTIVE;
-        }
-
-        // If quorum has been reached, the state is SUCCEEDED, otherwise it is ACTIVE.
-        return quorum(gameId) <= _scorecardAttestationsOf[gameId][scorecardId].count
-            ? DefifaScorecardState.SUCCEEDED
-            : DefifaScorecardState.ACTIVE;
+    /// @notice The amount of time that must go by before a scorecard can be ratified.
+    /// @param gameId The ID of the game to get the attestation period of.
+    /// @return The attestation period in number of blocks.
+    function attestationGracePeriodOf(uint256 gameId) public view override returns (uint256) {
+        // attestation grace period in bits 48-95 (48 bits).
+        return uint256(uint48(_packedScorecardInfoOf[gameId] >> 48));
     }
 
     /// @notice The amount of time between a scorecard being submitted and attestations to it being enabled, measured in
@@ -177,43 +140,6 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     function attestationStartTimeOf(uint256 gameId) public view override returns (uint256) {
         // attestation start time in bits 0-47 (48 bits).
         return uint256(uint48(_packedScorecardInfoOf[gameId]));
-    }
-
-    /// @notice The amount of time that must go by before a scorecard can be ratified.
-    /// @param gameId The ID of the game to get the attestation period of.
-    /// @return The attestation period in number of blocks.
-    function attestationGracePeriodOf(uint256 gameId) public view override returns (uint256) {
-        // attestation grace period in bits 48-95 (48 bits).
-        return uint256(uint48(_packedScorecardInfoOf[gameId] >> 48));
-    }
-
-    /// @notice The number of attestation units that must have participated in a proposal for it to be ratified.
-    /// @dev Each tier with at least one minted token contributes MAX_ATTESTATION_POWER_TIER to the total
-    /// eligible weight. Quorum is 50% of this total. Because every tier has equal max attestation power
-    /// regardless of supply, each tier's community has equal influence — a tier with 1 token and a tier
-    /// with 100 tokens both cap at MAX_ATTESTATION_POWER_TIER when fully attested. This prevents
-    /// high-supply tiers from dominating governance, keeping the game fair across all outcomes.
-    /// @return The quorum number of attestations.
-    function quorum(uint256 gameId) public view override returns (uint256) {
-        // Get the game's current funding cycle along with its metadata.
-        // slither-disable-next-line unused-return
-        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
-
-        // Get a reference to the number of tiers.
-        uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
-
-        // Keep a reference to the total eligible tier weight.
-        uint256 _eligibleTierWeights;
-
-        for (uint256 _i; _i < _numberOfTiers; _i++) {
-            // Each minted tier contributes MAX_ATTESTATION_POWER_TIER to the quorum denominator.
-            if (IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
-                _eligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
-            }
-        }
-
-        // Quorum = 50% of all minted tiers' attestation power.
-        return _eligibleTierWeights / 2;
     }
 
     /// @notice Gets an account's attestation power given a number of tiers to look through.
@@ -267,6 +193,80 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         }
     }
 
+    /// @notice The number of attestation units that must have participated in a proposal for it to be ratified.
+    /// @dev Each tier with at least one minted token contributes MAX_ATTESTATION_POWER_TIER to the total
+    /// eligible weight. Quorum is 50% of this total. Because every tier has equal max attestation power
+    /// regardless of supply, each tier's community has equal influence — a tier with 1 token and a tier
+    /// with 100 tokens both cap at MAX_ATTESTATION_POWER_TIER when fully attested. This prevents
+    /// high-supply tiers from dominating governance, keeping the game fair across all outcomes.
+    /// @return The quorum number of attestations.
+    function quorum(uint256 gameId) public view override returns (uint256) {
+        // Get the game's current funding cycle along with its metadata.
+        // slither-disable-next-line unused-return
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(gameId);
+
+        // Get a reference to the number of tiers.
+        uint256 _numberOfTiers = IDefifaHook(_metadata.dataHook).store().maxTierIdOf(_metadata.dataHook);
+
+        // Keep a reference to the total eligible tier weight.
+        uint256 _eligibleTierWeights;
+
+        for (uint256 _i; _i < _numberOfTiers; _i++) {
+            // Each minted tier contributes MAX_ATTESTATION_POWER_TIER to the quorum denominator.
+            if (IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_i + 1) != 0) {
+                _eligibleTierWeights += MAX_ATTESTATION_POWER_TIER;
+            }
+        }
+
+        // Quorum = 50% of all minted tiers' attestation power.
+        return _eligibleTierWeights / 2;
+    }
+
+    /// @notice The state of a proposal.
+    /// @param gameId The ID of the game to get a proposal state of.
+    /// @param scorecardId The ID of the proposal to get the state of.
+    /// @return The state.
+    /// @dev Boundary semantics (inclusive):
+    ///   - At exactly `attestationsBegin`, the state transitions from PENDING to ACTIVE (attestations are open).
+    ///   - At exactly `gracePeriodEnds`, the grace period has elapsed and the state transitions from ACTIVE to
+    ///     SUCCEEDED (if quorum is met) or remains ACTIVE (if not).
+    function stateOf(uint256 gameId, uint256 scorecardId) public view virtual override returns (DefifaScorecardState) {
+        // Keep a reference to the ratified scorecard ID.
+        uint256 _ratifiedScorecardId = ratifiedScorecardIdOf[gameId];
+
+        // If the game has already ratified a scorecard, return succeeded if the ratified proposal is being checked.
+        // Else return defeated.
+        if (_ratifiedScorecardId != 0) {
+            return _ratifiedScorecardId == scorecardId ? DefifaScorecardState.RATIFIED : DefifaScorecardState.DEFEATED;
+        }
+
+        // Get a reference to the scorecard.
+        DefifaScorecard memory _scorecard = _scorecardOf[gameId][scorecardId];
+
+        // Make sure the proposal is known.
+        // slither-disable-next-line incorrect-equality
+        if (_scorecard.attestationsBegin == 0) {
+            revert DefifaGovernor_UnknownProposal();
+        }
+
+        // If the scorecard has attestations beginning in the future, the state is PENDING.
+        // At exactly `attestationsBegin`, attestations are open so the state is ACTIVE.
+        if (_scorecard.attestationsBegin > block.timestamp) {
+            return DefifaScorecardState.PENDING;
+        }
+
+        // If the scorecard's grace period has not yet ended, the state is ACTIVE.
+        // At exactly `gracePeriodEnds`, the grace period has elapsed so we fall through to the quorum check.
+        if (_scorecard.gracePeriodEnds > block.timestamp) {
+            return DefifaScorecardState.ACTIVE;
+        }
+
+        // If quorum has been reached, the state is SUCCEEDED, otherwise it is ACTIVE.
+        return quorum(gameId) <= _scorecardAttestationsOf[gameId][scorecardId].count
+            ? DefifaScorecardState.SUCCEEDED
+            : DefifaScorecardState.ACTIVE;
+    }
+
     //*********************************************************************//
     // -------------------------- constructor ---------------------------- //
     //*********************************************************************//
@@ -315,79 +315,6 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
     //*********************************************************************//
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
-
-    /// @notice Submits a scorecard to be attested to.
-    /// @param _tierWeights The weights of each tier in the scorecard.
-    /// @return scorecardId The scorecard's ID.
-    function submitScorecardFor(
-        uint256 _gameId,
-        DefifaTierCashOutWeight[] calldata _tierWeights
-    )
-        external
-        override
-        returns (uint256 scorecardId)
-    {
-        // Make sure a proposal hasn't yet been ratified.
-        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
-
-        // Make sure the game has been initialized.
-        // slither-disable-next-line incorrect-equality
-        if (_packedScorecardInfoOf[_gameId] == 0) revert DefifaGovernor_GameNotFound();
-
-        // Make sure no weight is assigned to an unowned tier.
-        uint256 _numberOfTierWeights = _tierWeights.length;
-
-        // Get the game's current funding cycle along with its metadata.
-        // slither-disable-next-line unused-return
-        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
-
-        // Make sure the game is in its scoring phase.
-        if (IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId) != DefifaGamePhase.SCORING)
-        {
-            revert DefifaGovernor_NotAllowed();
-        }
-
-        // If there's a weight assigned to the tier, make sure there is a token backed by it.
-        for (uint256 _i; _i < _numberOfTierWeights; _i++) {
-            if (
-                _tierWeights[_i].cashOutWeight > 0
-                    && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0
-            ) {
-                revert DefifaGovernor_UnownedProposedCashoutValue();
-            }
-        }
-
-        // Hash the scorecard.
-        scorecardId =
-            _hashScorecardOf({_gameHook: _metadata.dataHook, _calldata: _buildScorecardCalldataFor(_tierWeights)});
-
-        // Store the scorecard
-        DefifaScorecard storage _scorecard = _scorecardOf[_gameId][scorecardId];
-        if (_scorecard.attestationsBegin != 0) revert DefifaGovernor_DuplicateScorecard();
-
-        uint256 _attestationStartTime = attestationStartTimeOf(_gameId);
-        uint256 _timeUntilAttestationsBegin =
-            block.timestamp > _attestationStartTime ? 0 : _attestationStartTime - block.timestamp;
-
-        uint48 _attestationsBegin = uint48(block.timestamp + _timeUntilAttestationsBegin);
-        _scorecard.attestationsBegin = _attestationsBegin;
-        // Grace period extends from when attestations begin, not from submission time.
-        // This prevents the grace period from expiring before attestations even start
-        // when a scorecard is submitted early.
-        _scorecard.gracePeriodEnds = uint48(_attestationsBegin + attestationGracePeriodOf(_gameId));
-
-        // Keep a reference to the default attestation delegate.
-        address _defaultAttestationDelegate = IDefifaHook(_metadata.dataHook).defaultAttestationDelegate();
-
-        // If the scorecard is being sent from the default attestation delegate, store it.
-        if (msg.sender == _defaultAttestationDelegate) {
-            defaultAttestationDelegateProposalOf[_gameId] = scorecardId;
-        }
-
-        emit ScorecardSubmitted(
-            _gameId, scorecardId, _tierWeights, msg.sender == _defaultAttestationDelegate, msg.sender
-        );
-    }
 
     /// @notice Attests to a scorecard.
     /// @param gameId The ID of the game to which the scorecard belongs.
@@ -478,6 +405,79 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         }
 
         emit ScorecardRatified(gameId, scorecardId, msg.sender);
+    }
+
+    /// @notice Submits a scorecard to be attested to.
+    /// @param _tierWeights The weights of each tier in the scorecard.
+    /// @return scorecardId The scorecard's ID.
+    function submitScorecardFor(
+        uint256 _gameId,
+        DefifaTierCashOutWeight[] calldata _tierWeights
+    )
+        external
+        override
+        returns (uint256 scorecardId)
+    {
+        // Make sure a proposal hasn't yet been ratified.
+        if (ratifiedScorecardIdOf[_gameId] != 0) revert DefifaGovernor_AlreadyRatified();
+
+        // Make sure the game has been initialized.
+        // slither-disable-next-line incorrect-equality
+        if (_packedScorecardInfoOf[_gameId] == 0) revert DefifaGovernor_GameNotFound();
+
+        // Make sure no weight is assigned to an unowned tier.
+        uint256 _numberOfTierWeights = _tierWeights.length;
+
+        // Get the game's current funding cycle along with its metadata.
+        // slither-disable-next-line unused-return
+        (, JBRulesetMetadata memory _metadata) = controller.currentRulesetOf(_gameId);
+
+        // Make sure the game is in its scoring phase.
+        if (IDefifaHook(_metadata.dataHook).gamePhaseReporter().currentGamePhaseOf(_gameId) != DefifaGamePhase.SCORING)
+        {
+            revert DefifaGovernor_NotAllowed();
+        }
+
+        // If there's a weight assigned to the tier, make sure there is a token backed by it.
+        for (uint256 _i; _i < _numberOfTierWeights; _i++) {
+            if (
+                _tierWeights[_i].cashOutWeight > 0
+                    && IDefifaHook(_metadata.dataHook).currentSupplyOfTier(_tierWeights[_i].id) == 0
+            ) {
+                revert DefifaGovernor_UnownedProposedCashoutValue();
+            }
+        }
+
+        // Hash the scorecard.
+        scorecardId =
+            _hashScorecardOf({_gameHook: _metadata.dataHook, _calldata: _buildScorecardCalldataFor(_tierWeights)});
+
+        // Store the scorecard
+        DefifaScorecard storage _scorecard = _scorecardOf[_gameId][scorecardId];
+        if (_scorecard.attestationsBegin != 0) revert DefifaGovernor_DuplicateScorecard();
+
+        uint256 _attestationStartTime = attestationStartTimeOf(_gameId);
+        uint256 _timeUntilAttestationsBegin =
+            block.timestamp > _attestationStartTime ? 0 : _attestationStartTime - block.timestamp;
+
+        uint48 _attestationsBegin = uint48(block.timestamp + _timeUntilAttestationsBegin);
+        _scorecard.attestationsBegin = _attestationsBegin;
+        // Grace period extends from when attestations begin, not from submission time.
+        // This prevents the grace period from expiring before attestations even start
+        // when a scorecard is submitted early.
+        _scorecard.gracePeriodEnds = uint48(_attestationsBegin + attestationGracePeriodOf(_gameId));
+
+        // Keep a reference to the default attestation delegate.
+        address _defaultAttestationDelegate = IDefifaHook(_metadata.dataHook).defaultAttestationDelegate();
+
+        // If the scorecard is being sent from the default attestation delegate, store it.
+        if (msg.sender == _defaultAttestationDelegate) {
+            defaultAttestationDelegateProposalOf[_gameId] = scorecardId;
+        }
+
+        emit ScorecardSubmitted(
+            _gameId, scorecardId, _tierWeights, msg.sender == _defaultAttestationDelegate, msg.sender
+        );
     }
 
     //*********************************************************************//

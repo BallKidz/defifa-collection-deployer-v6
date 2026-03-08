@@ -156,24 +156,19 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     // ------------------------- external views -------------------------- //
     //*********************************************************************//
 
-    /// @notice The cashOut weight for each tier.
-    /// @return The array of weights, indexed by tier.
-    function tierCashOutWeights() external view override returns (uint256[128] memory) {
-        return _tierCashOutWeights;
-    }
+    /// @notice The first owner of each token ID, which corresponds to the address that originally contributed to the
+    /// project to receive the NFT.
+    /// @param tokenId The ID of the token to get the first owner of.
+    /// @return The first owner of the token.
+    function firstOwnerOf(uint256 tokenId) external view override returns (address) {
+        // Get a reference to the first owner.
+        address _storedFirstOwner = _firstOwnerOf[tokenId];
 
-    /// @notice Returns the delegate of an account for specific tier.
-    /// @param account The account to check for a delegate of.
-    /// @param tier The tier to check within.
-    function getTierDelegateOf(address account, uint256 tier) external view override returns (address) {
-        return _tierDelegation[account][tier];
-    }
+        // If the stored first owner is set, return it.
+        if (_storedFirstOwner != address(0)) return _storedFirstOwner;
 
-    /// @notice Returns the current attestation power of an address for a specific tier.
-    /// @param account The address to check.
-    /// @param tier The tier to check within.
-    function getTierAttestationUnitsOf(address account, uint256 tier) external view override returns (uint256) {
-        return _delegateTierCheckpoints[account][tier].latest();
+        // Otherwise, the first owner must be the current owner.
+        return _owners[tokenId];
     }
 
     /// @notice Returns the past attestation units of a specific address for a specific tier.
@@ -193,12 +188,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         return _delegateTierCheckpoints[account][tier].upperLookup(timestamp);
     }
 
-    /// @notice Returns the total amount of attestation units that exists for a tier.
-    /// @param tier The tier to check.
-    function getTierTotalAttestationUnitsOf(uint256 tier) external view override returns (uint256) {
-        return _totalTierCheckpoints[tier].latest();
-    }
-
     /// @notice Returns the total amount of attestation units that has existed for a tier.
     /// @param tier The tier to check.
     /// @param timestamp The timestamp to check the total attestation units at.
@@ -214,19 +203,30 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         return _totalTierCheckpoints[tier].upperLookup(timestamp);
     }
 
-    /// @notice The first owner of each token ID, which corresponds to the address that originally contributed to the
-    /// project to receive the NFT.
-    /// @param tokenId The ID of the token to get the first owner of.
-    /// @return The first owner of the token.
-    function firstOwnerOf(uint256 tokenId) external view override returns (address) {
-        // Get a reference to the first owner.
-        address _storedFirstOwner = _firstOwnerOf[tokenId];
+    /// @notice Returns the current attestation power of an address for a specific tier.
+    /// @param account The address to check.
+    /// @param tier The tier to check within.
+    function getTierAttestationUnitsOf(address account, uint256 tier) external view override returns (uint256) {
+        return _delegateTierCheckpoints[account][tier].latest();
+    }
 
-        // If the stored first owner is set, return it.
-        if (_storedFirstOwner != address(0)) return _storedFirstOwner;
+    /// @notice Returns the delegate of an account for specific tier.
+    /// @param account The account to check for a delegate of.
+    /// @param tier The tier to check within.
+    function getTierDelegateOf(address account, uint256 tier) external view override returns (address) {
+        return _tierDelegation[account][tier];
+    }
 
-        // Otherwise, the first owner must be the current owner.
-        return _owners[tokenId];
+    /// @notice Returns the total amount of attestation units that exists for a tier.
+    /// @param tier The tier to check.
+    function getTierTotalAttestationUnitsOf(uint256 tier) external view override returns (uint256) {
+        return _totalTierCheckpoints[tier].latest();
+    }
+
+    /// @notice The cashOut weight for each tier.
+    /// @return The array of weights, indexed by tier.
+    function tierCashOutWeights() external view override returns (uint256[128] memory) {
+        return _tierCashOutWeights;
     }
 
     /// @notice The name of the tier with the specified ID.
@@ -238,72 +238,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     //*********************************************************************//
     // -------------------------- public views --------------------------- //
     //*********************************************************************//
-
-    /// @notice The metadata URI of the provided token ID.
-    /// @dev Defer to the tokenUriResolver if set, otherwise, use the tokenUri set with the token's tier.
-    /// @param tokenId The ID of the token to get the tier URI for.
-    /// @return The token URI corresponding with the tier or the tokenUriResolver URI.
-    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
-        // Use the resolver.
-        return store.tokenUriResolverOf(address(this)).tokenUriOf(address(this), tokenId);
-    }
-
-    /// @notice The cumulative weight the given token IDs have in cashOuts compared to the `totalCashOutWeight`.
-    /// @param tokenIds The IDs of the tokens to get the cumulative cashOut weight of.
-    /// @return cumulativeWeight The weight.
-    function cashOutWeightOf(uint256[] memory tokenIds)
-        public
-        view
-        virtual
-        override
-        returns (uint256 cumulativeWeight)
-    {
-        cumulativeWeight = DefifaHookLib.computeCashOutWeightBatch({
-            tokenIds: tokenIds,
-            _store: store,
-            hook: address(this),
-            tierCashOutWeights: _tierCashOutWeights,
-            tokensRedeemedFrom: tokensRedeemedFrom
-        });
-    }
-
-    /// @notice The weight the given token ID has in cashOuts.
-    /// @param tokenId The ID of the token to get the cashOut weight of.
-    /// @return The weight.
-    function cashOutWeightOf(uint256 tokenId) public view override returns (uint256) {
-        return DefifaHookLib.computeCashOutWeight({
-            tokenId: tokenId,
-            _store: store,
-            hook: address(this),
-            tierCashOutWeights: _tierCashOutWeights,
-            tokensRedeemedFrom: tokensRedeemedFrom
-        });
-    }
-
-    /// @notice The amount of tokens of a tier that are currently in circulation.
-    /// @param tierId The ID of the tier to get the current supply of.
-    function currentSupplyOfTier(uint256 tierId) public view returns (uint256) {
-        return DefifaHookLib.computeCurrentSupply({_store: store, hook: address(this), tierId: tierId});
-    }
-
-    /// @notice The combined cash out weight of all outstanding NFTs.
-    /// @dev An NFT's cash out weight is its price.
-    /// @return The total cash out weight.
-    function totalCashOutWeight() public view virtual override returns (uint256) {
-        return TOTAL_CASHOUT_WEIGHT;
-    }
-
-    /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens this game was allocated from paying the network fee.
-    /// @return defifaTokenAllocation The $DEFIFA token allocation.
-    /// @return baseProtocolTokenAllocation The $BASE_PROTOCOL token allocation.
-    function tokenAllocations()
-        public
-        view
-        returns (uint256 defifaTokenAllocation, uint256 baseProtocolTokenAllocation)
-    {
-        defifaTokenAllocation = defifaToken.balanceOf(address(this));
-        baseProtocolTokenAllocation = baseProtocolToken.balanceOf(address(this));
-    }
 
     /// @notice The data calculated before a cash out is recorded in the terminal store. This data is provided to the
     /// terminal's `cashOutTokensOf(...)` transaction.
@@ -367,6 +301,72 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         cashOutTaxRate = context.cashOutTaxRate;
     }
 
+    /// @notice The cumulative weight the given token IDs have in cashOuts compared to the `totalCashOutWeight`.
+    /// @param tokenIds The IDs of the tokens to get the cumulative cashOut weight of.
+    /// @return cumulativeWeight The weight.
+    function cashOutWeightOf(uint256[] memory tokenIds)
+        public
+        view
+        virtual
+        override
+        returns (uint256 cumulativeWeight)
+    {
+        cumulativeWeight = DefifaHookLib.computeCashOutWeightBatch({
+            tokenIds: tokenIds,
+            _store: store,
+            hook: address(this),
+            tierCashOutWeights: _tierCashOutWeights,
+            tokensRedeemedFrom: tokensRedeemedFrom
+        });
+    }
+
+    /// @notice The weight the given token ID has in cashOuts.
+    /// @param tokenId The ID of the token to get the cashOut weight of.
+    /// @return The weight.
+    function cashOutWeightOf(uint256 tokenId) public view override returns (uint256) {
+        return DefifaHookLib.computeCashOutWeight({
+            tokenId: tokenId,
+            _store: store,
+            hook: address(this),
+            tierCashOutWeights: _tierCashOutWeights,
+            tokensRedeemedFrom: tokensRedeemedFrom
+        });
+    }
+
+    /// @notice The amount of tokens of a tier that are currently in circulation.
+    /// @param tierId The ID of the tier to get the current supply of.
+    function currentSupplyOfTier(uint256 tierId) public view returns (uint256) {
+        return DefifaHookLib.computeCurrentSupply({_store: store, hook: address(this), tierId: tierId});
+    }
+
+    /// @notice Indicates if this contract adheres to the specified interface.
+    /// @dev See {IERC165-supportsInterface}.
+    /// @param interfaceId The ID of the interface to check for adherence to.
+    function supportsInterface(bytes4 interfaceId) public view override(JB721Hook, IERC165) returns (bool) {
+        return interfaceId == type(IDefifaHook).interfaceId || super.supportsInterface(interfaceId);
+    }
+
+    /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens this game was allocated from paying the network fee.
+    /// @return defifaTokenAllocation The $DEFIFA token allocation.
+    /// @return baseProtocolTokenAllocation The $BASE_PROTOCOL token allocation.
+    function tokenAllocations()
+        public
+        view
+        returns (uint256 defifaTokenAllocation, uint256 baseProtocolTokenAllocation)
+    {
+        defifaTokenAllocation = defifaToken.balanceOf(address(this));
+        baseProtocolTokenAllocation = baseProtocolToken.balanceOf(address(this));
+    }
+
+    /// @notice The metadata URI of the provided token ID.
+    /// @dev Defer to the tokenUriResolver if set, otherwise, use the tokenUri set with the token's tier.
+    /// @param tokenId The ID of the token to get the tier URI for.
+    /// @return The token URI corresponding with the tier or the tokenUriResolver URI.
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+        // Use the resolver.
+        return store.tokenUriResolverOf(address(this)).tokenUriOf(address(this), tokenId);
+    }
+
     /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens claimable for a set of token IDs.
     /// @param tokenIds The IDs of the tokens that justify a $DEFIFA claim.
     /// @return defifaTokenAmount The amount of $DEFIFA that can be claimed.
@@ -390,11 +390,11 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         });
     }
 
-    /// @notice Indicates if this contract adheres to the specified interface.
-    /// @dev See {IERC165-supportsInterface}.
-    /// @param interfaceId The ID of the interface to check for adherence to.
-    function supportsInterface(bytes4 interfaceId) public view override(JB721Hook, IERC165) returns (bool) {
-        return interfaceId == type(IDefifaHook).interfaceId || super.supportsInterface(interfaceId);
+    /// @notice The combined cash out weight of all outstanding NFTs.
+    /// @dev An NFT's cash out weight is its price.
+    /// @return The total cash out weight.
+    function totalCashOutWeight() public view virtual override returns (uint256) {
+        return TOTAL_CASHOUT_WEIGHT;
     }
 
     //*********************************************************************//
@@ -594,31 +594,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     // ---------------------- external transactions ---------------------- //
     //*********************************************************************//
 
-    /// @notice Stores the cashOut weights that should be used in the end game phase.
-    /// @dev Only this contract's owner can set tier cashOut weights.
-    /// @param tierWeights The tier weights to set.
-    function setTierCashOutWeightsTo(DefifaTierCashOutWeight[] memory tierWeights) external override onlyOwner {
-        // Get a reference to the game phase.
-        DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(PROJECT_ID);
-
-        // Make sure the game has ended.
-        if (_gamePhase != DefifaGamePhase.SCORING) {
-            revert DefifaHook_GameIsntScoringYet();
-        }
-
-        // Make sure the cashOut weights haven't already been set.
-        if (cashOutWeightIsSet) revert DefifaHook_CashoutWeightsAlreadySet();
-
-        // Validate weights and build the array. Reverts on invalid input.
-        _tierCashOutWeights =
-            DefifaHookLib.validateAndBuildWeights({tierWeights: tierWeights, _store: store, hook: address(this)});
-
-        // Mark the cashOut weight as set.
-        cashOutWeightIsSet = true;
-
-        emit TierCashOutWeightsSet(tierWeights, msg.sender);
-    }
-
     /// @notice Burns the specified NFTs upon token holder cash out, reclaiming funds from the project's balance for
     /// `context.beneficiary`. Part of `IJBCashOutHook`.
     /// @dev Reverts if the calling contract is not one of the project's terminals.
@@ -722,6 +697,43 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         }
     }
 
+    /// @notice Stores the cashOut weights that should be used in the end game phase.
+    /// @dev Only this contract's owner can set tier cashOut weights.
+    /// @param tierWeights The tier weights to set.
+    function setTierCashOutWeightsTo(DefifaTierCashOutWeight[] memory tierWeights) external override onlyOwner {
+        // Get a reference to the game phase.
+        DefifaGamePhase _gamePhase = gamePhaseReporter.currentGamePhaseOf(PROJECT_ID);
+
+        // Make sure the game has ended.
+        if (_gamePhase != DefifaGamePhase.SCORING) {
+            revert DefifaHook_GameIsntScoringYet();
+        }
+
+        // Make sure the cashOut weights haven't already been set.
+        if (cashOutWeightIsSet) revert DefifaHook_CashoutWeightsAlreadySet();
+
+        // Validate weights and build the array. Reverts on invalid input.
+        _tierCashOutWeights =
+            DefifaHookLib.validateAndBuildWeights({tierWeights: tierWeights, _store: store, hook: address(this)});
+
+        // Mark the cashOut weight as set.
+        cashOutWeightIsSet = true;
+
+        emit TierCashOutWeightsSet(tierWeights, msg.sender);
+    }
+
+    /// @notice Delegate attestations.
+    /// @param delegatee The account to delegate tier attestation units to.
+    /// @param tierId The ID of the tier to delegate attestation units for.
+    function setTierDelegateTo(address delegatee, uint256 tierId) public virtual override {
+        // Make sure the current game phase is the minting phase.
+        if (gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) != DefifaGamePhase.MINT) {
+            revert DefifaHook_DelegateChangesUnavailableInThisPhase();
+        }
+
+        _delegateTier({_account: msg.sender, _delegatee: delegatee, _tierId: tierId});
+    }
+
     /// @notice Delegate attestations.
     /// @param delegations An array of tiers to set delegates for.
     function setTierDelegatesTo(DefifaDelegation[] memory delegations) external virtual override {
@@ -751,21 +763,146 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         }
     }
 
-    /// @notice Delegate attestations.
-    /// @param delegatee The account to delegate tier attestation units to.
-    /// @param tierId The ID of the tier to delegate attestation units for.
-    function setTierDelegateTo(address delegatee, uint256 tierId) public virtual override {
-        // Make sure the current game phase is the minting phase.
-        if (gamePhaseReporter.currentGamePhaseOf(PROJECT_ID) != DefifaGamePhase.MINT) {
-            revert DefifaHook_DelegateChangesUnavailableInThisPhase();
-        }
-
-        _delegateTier({_account: msg.sender, _delegatee: delegatee, _tierId: tierId});
-    }
-
     //*********************************************************************//
     // ------------------------ internal functions ----------------------- //
     //*********************************************************************//
+
+    /// @notice Claims the defifa and base protocol tokens for a beneficiary.
+    /// @param _beneficiary The address to claim tokens for.
+    /// @param shareToBeneficiary The share relative to the `outOfTotal` to send the user.
+    /// @param outOfTotal The total share that the `shareToBeneficiary` is relative to.
+    /// @return beneficiaryReceivedTokens A flag indicating if the beneficiary received any tokens.
+    function _claimTokensFor(
+        address _beneficiary,
+        uint256 shareToBeneficiary,
+        uint256 outOfTotal
+    )
+        internal
+        returns (bool beneficiaryReceivedTokens)
+    {
+        return DefifaHookLib.claimTokensFor({
+            _beneficiary: _beneficiary,
+            shareToBeneficiary: shareToBeneficiary,
+            outOfTotal: outOfTotal,
+            _defifaToken: defifaToken,
+            _baseProtocolToken: baseProtocolToken
+        });
+    }
+
+    /// @notice Delegate all attestation units for the specified tier.
+    /// @param _account The account delegating tier attestation units.
+    /// @param _delegatee The account to delegate tier attestation units to.
+    /// @param _tierId The ID of the tier for which attestation units are being transferred.
+    function _delegateTier(address _account, address _delegatee, uint256 _tierId) internal virtual {
+        // Get the current delegatee
+        address _oldDelegate = _tierDelegation[_account][_tierId];
+
+        // Store the new delegatee
+        _tierDelegation[_account][_tierId] = _delegatee;
+
+        emit DelegateChanged(_account, _oldDelegate, _delegatee);
+
+        // Move the attestations.
+        _moveTierDelegateAttestations({
+            _from: _oldDelegate,
+            _to: _delegatee,
+            _tierId: _tierId,
+            _amount: _getTierAttestationUnits({_account: _account, _tierId: _tierId})
+        });
+    }
+
+    /// @notice A function that will run when tokens are burned via cashOut.
+    /// @param _tokenIds The IDs of the tokens that were burned.
+    function _didBurn(uint256[] memory _tokenIds) internal virtual override {
+        // Add to burned counter.
+        store.recordBurn(_tokenIds);
+    }
+
+    /// @notice Gets the amount of attestation units an address has for a particular tier.
+    /// @param _account The account to get attestation units for.
+    /// @param _tierId The ID of the tier to get attestation units for.
+    /// @return The attestation units.
+    function _getTierAttestationUnits(address _account, uint256 _tierId) internal view virtual returns (uint256) {
+        return store.tierVotingUnitsOf({hook: address(this), account: _account, tierId: _tierId});
+    }
+
+    /// @notice Mints a token in all provided tiers.
+    /// @param _amount The amount to base the mints on. All mints' price floors must fit in this amount.
+    /// @param _mintTierIds An array of tier IDs that are intended to be minted.
+    /// @param _beneficiary The address to mint for.
+    /// @return leftoverAmount The amount leftover after the mint.
+    function _mintAll(
+        uint256 _amount,
+        uint16[] memory _mintTierIds,
+        address _beneficiary
+    )
+        internal
+        returns (uint256 leftoverAmount)
+    {
+        // Keep a reference to the token ID.
+        uint256[] memory _tokenIds;
+
+        // Record the mint. The returned token IDs correspond to the tiers passed in.
+        (_tokenIds, leftoverAmount) = store.recordMint({
+            amount: _amount,
+            tierIds: _mintTierIds,
+            isOwnerMint: false // Not a manual mint
+        });
+
+        // Get a reference to the number of mints.
+        uint256 _mintsLength = _tokenIds.length;
+
+        // Keep a reference to the token ID being iterated on.
+        uint256 _tokenId;
+
+        // Increment the paid mint cost.
+        _totalMintCost += _amount;
+
+        // Loop through each token ID and mint.
+        for (uint256 _i; _i < _mintsLength;) {
+            // Get a reference to the tier being iterated on.
+            _tokenId = _tokenIds[_i];
+
+            // Mint the tokens.
+            _mint(_beneficiary, _tokenId);
+
+            emit Mint(_tokenId, _mintTierIds[_i], _beneficiary, _amount, msg.sender);
+
+            unchecked {
+                ++_i;
+            }
+        }
+    }
+
+    /// @notice Moves delegated tier attestations from one delegate to another.
+    /// @param _from The account to transfer tier attestation units from.
+    /// @param _to The account to transfer tier attestation units to.
+    /// @param _tierId The ID of the tier for which attestation units are being transferred.
+    /// @param _amount The amount of attestation units to delegate.
+    function _moveTierDelegateAttestations(address _from, address _to, uint256 _tierId, uint256 _amount) internal {
+        // Nothing to do if moving to the same account, or no amount is being moved.
+        if (_from == _to || _amount == 0) return;
+
+        // If not moving from the zero address, update the checkpoints to subtract the amount.
+        if (_from != address(0)) {
+            // Get the current amount for the sending delegate.
+            uint208 _current = _delegateTierCheckpoints[_from][_tierId].latest();
+            // Set the new amount for the sending delegate.
+            (uint256 _oldValue, uint256 _newValue) =
+                _delegateTierCheckpoints[_from][_tierId].push(uint48(block.timestamp), _current - uint208(_amount));
+            emit TierDelegateAttestationsChanged(_from, _tierId, _oldValue, _newValue, msg.sender);
+        }
+
+        // If not moving to the zero address, update the checkpoints to add the amount.
+        if (_to != address(0)) {
+            // Get the current amount for the receiving delegate.
+            uint208 _current = _delegateTierCheckpoints[_to][_tierId].latest();
+            // Set the new amount for the receiving delegate.
+            (uint256 _oldValue, uint256 _newValue) =
+                _delegateTierCheckpoints[_to][_tierId].push(uint48(block.timestamp), _current + uint208(_amount));
+            emit TierDelegateAttestationsChanged(_to, _tierId, _oldValue, _newValue, msg.sender);
+        }
+    }
 
     /// @notice Process an incoming payment.
     /// @param context The Juicebox standard project payment data.
@@ -827,36 +964,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         if (_leftoverAmount != 0) revert DefifaHook_Overspending();
     }
 
-    /// @notice Gets the amount of attestation units an address has for a particular tier.
-    /// @param _account The account to get attestation units for.
-    /// @param _tierId The ID of the tier to get attestation units for.
-    /// @return The attestation units.
-    function _getTierAttestationUnits(address _account, uint256 _tierId) internal view virtual returns (uint256) {
-        return store.tierVotingUnitsOf({hook: address(this), account: _account, tierId: _tierId});
-    }
-
-    /// @notice Delegate all attestation units for the specified tier.
-    /// @param _account The account delegating tier attestation units.
-    /// @param _delegatee The account to delegate tier attestation units to.
-    /// @param _tierId The ID of the tier for which attestation units are being transferred.
-    function _delegateTier(address _account, address _delegatee, uint256 _tierId) internal virtual {
-        // Get the current delegatee
-        address _oldDelegate = _tierDelegation[_account][_tierId];
-
-        // Store the new delegatee
-        _tierDelegation[_account][_tierId] = _delegatee;
-
-        emit DelegateChanged(_account, _oldDelegate, _delegatee);
-
-        // Move the attestations.
-        _moveTierDelegateAttestations({
-            _from: _oldDelegate,
-            _to: _delegatee,
-            _tierId: _tierId,
-            _amount: _getTierAttestationUnits({_account: _account, _tierId: _tierId})
-        });
-    }
-
     /// @notice Transfers, mints, or burns tier attestation units. To register a mint, `_from` should be zero. To
     /// register a burn, `_to` should be zero. Total supply of attestation units will be adjusted with mints and burns.
     /// @param _from The account to transfer tier attestation units from.
@@ -895,113 +1002,6 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             _to: _tierDelegation[_to][_tierId],
             _tierId: _tierId,
             _amount: _amount
-        });
-    }
-
-    /// @notice Moves delegated tier attestations from one delegate to another.
-    /// @param _from The account to transfer tier attestation units from.
-    /// @param _to The account to transfer tier attestation units to.
-    /// @param _tierId The ID of the tier for which attestation units are being transferred.
-    /// @param _amount The amount of attestation units to delegate.
-    function _moveTierDelegateAttestations(address _from, address _to, uint256 _tierId, uint256 _amount) internal {
-        // Nothing to do if moving to the same account, or no amount is being moved.
-        if (_from == _to || _amount == 0) return;
-
-        // If not moving from the zero address, update the checkpoints to subtract the amount.
-        if (_from != address(0)) {
-            // Get the current amount for the sending delegate.
-            uint208 _current = _delegateTierCheckpoints[_from][_tierId].latest();
-            // Set the new amount for the sending delegate.
-            (uint256 _oldValue, uint256 _newValue) =
-                _delegateTierCheckpoints[_from][_tierId].push(uint48(block.timestamp), _current - uint208(_amount));
-            emit TierDelegateAttestationsChanged(_from, _tierId, _oldValue, _newValue, msg.sender);
-        }
-
-        // If not moving to the zero address, update the checkpoints to add the amount.
-        if (_to != address(0)) {
-            // Get the current amount for the receiving delegate.
-            uint208 _current = _delegateTierCheckpoints[_to][_tierId].latest();
-            // Set the new amount for the receiving delegate.
-            (uint256 _oldValue, uint256 _newValue) =
-                _delegateTierCheckpoints[_to][_tierId].push(uint48(block.timestamp), _current + uint208(_amount));
-            emit TierDelegateAttestationsChanged(_to, _tierId, _oldValue, _newValue, msg.sender);
-        }
-    }
-
-    /// @notice A function that will run when tokens are burned via cashOut.
-    /// @param _tokenIds The IDs of the tokens that were burned.
-    function _didBurn(uint256[] memory _tokenIds) internal virtual override {
-        // Add to burned counter.
-        store.recordBurn(_tokenIds);
-    }
-
-    /// @notice Mints a token in all provided tiers.
-    /// @param _amount The amount to base the mints on. All mints' price floors must fit in this amount.
-    /// @param _mintTierIds An array of tier IDs that are intended to be minted.
-    /// @param _beneficiary The address to mint for.
-    /// @return leftoverAmount The amount leftover after the mint.
-    function _mintAll(
-        uint256 _amount,
-        uint16[] memory _mintTierIds,
-        address _beneficiary
-    )
-        internal
-        returns (uint256 leftoverAmount)
-    {
-        // Keep a reference to the token ID.
-        uint256[] memory _tokenIds;
-
-        // Record the mint. The returned token IDs correspond to the tiers passed in.
-        (_tokenIds, leftoverAmount) = store.recordMint({
-            amount: _amount,
-            tierIds: _mintTierIds,
-            isOwnerMint: false // Not a manual mint
-        });
-
-        // Get a reference to the number of mints.
-        uint256 _mintsLength = _tokenIds.length;
-
-        // Keep a reference to the token ID being iterated on.
-        uint256 _tokenId;
-
-        // Increment the paid mint cost.
-        _totalMintCost += _amount;
-
-        // Loop through each token ID and mint.
-        for (uint256 _i; _i < _mintsLength;) {
-            // Get a reference to the tier being iterated on.
-            _tokenId = _tokenIds[_i];
-
-            // Mint the tokens.
-            _mint(_beneficiary, _tokenId);
-
-            emit Mint(_tokenId, _mintTierIds[_i], _beneficiary, _amount, msg.sender);
-
-            unchecked {
-                ++_i;
-            }
-        }
-    }
-
-    /// @notice Claims the defifa and base protocol tokens for a beneficiary.
-    /// @param _beneficiary The address to claim tokens for.
-    /// @param shareToBeneficiary The share relative to the `outOfTotal` to send the user.
-    /// @param outOfTotal The total share that the `shareToBeneficiary` is relative to.
-    /// @return beneficiaryReceivedTokens A flag indicating if the beneficiary received any tokens.
-    function _claimTokensFor(
-        address _beneficiary,
-        uint256 shareToBeneficiary,
-        uint256 outOfTotal
-    )
-        internal
-        returns (bool beneficiaryReceivedTokens)
-    {
-        return DefifaHookLib.claimTokensFor({
-            _beneficiary: _beneficiary,
-            shareToBeneficiary: shareToBeneficiary,
-            outOfTotal: outOfTotal,
-            _defifaToken: defifaToken,
-            _baseProtocolToken: baseProtocolToken
         });
     }
 

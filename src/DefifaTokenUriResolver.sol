@@ -241,36 +241,6 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
         return string.concat(parts[0], Base64.encode(abi.encodePacked(parts[1], parts[2], parts[3])));
     }
 
-    /// @notice Gets a substring.
-    /// @dev If the first character is a space, it is not included.
-    /// @param _str The string to get a substring of.
-    /// @param _startIndex The first index of the substring from within the string.
-    /// @param _endIndex The last index of the string from within the string.
-    /// @return substring The substring.
-    function _getSubstring(
-        string memory _str,
-        uint256 _startIndex,
-        uint256 _endIndex
-    )
-        internal
-        pure
-        returns (string memory substring)
-    {
-        bytes memory _strBytes = bytes(_str);
-        if (_startIndex >= _strBytes.length) return "";
-        if (_endIndex > _strBytes.length) _endIndex = _strBytes.length;
-        _startIndex = _strBytes[_startIndex] == bytes1(0x20) ? _startIndex + 1 : _startIndex;
-        if (_startIndex >= _endIndex) return "";
-        bytes memory _result = new bytes(_endIndex - _startIndex);
-        for (uint256 _i = _startIndex; _i < _endIndex;) {
-            _result[_i - _startIndex] = _strBytes[_i];
-            unchecked {
-                ++_i;
-            }
-        }
-        return string(_result);
-    }
-
     /// @notice Formats a balance from a fixed point number to a string.
     /// @param _amount The fixed point amount.
     /// @param _token The token the amount is in.
@@ -308,5 +278,35 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
         return _isEth
             ? string(abi.encodePacked("\u039E", _integerPart, ".", _decimalPartStr))
             : string(abi.encodePacked(_integerPart, ".", _decimalPartStr, " ", IERC20Metadata(_token).symbol()));
+    }
+
+    /// @notice Gets a substring.
+    /// @dev If the first character is a space, it is not included.
+    /// @param _str The string to get a substring of.
+    /// @param _startIndex The first index of the substring from within the string.
+    /// @param _endIndex The last index of the string from within the string.
+    /// @return substring The substring.
+    function _getSubstring(
+        string memory _str,
+        uint256 _startIndex,
+        uint256 _endIndex
+    )
+        internal
+        pure
+        returns (string memory substring)
+    {
+        bytes memory _strBytes = bytes(_str);
+        if (_startIndex >= _strBytes.length) return "";
+        if (_endIndex > _strBytes.length) _endIndex = _strBytes.length;
+        _startIndex = _strBytes[_startIndex] == bytes1(0x20) ? _startIndex + 1 : _startIndex;
+        if (_startIndex >= _endIndex) return "";
+        bytes memory _result = new bytes(_endIndex - _startIndex);
+        for (uint256 _i = _startIndex; _i < _endIndex;) {
+            _result[_i - _startIndex] = _strBytes[_i];
+            unchecked {
+                ++_i;
+            }
+        }
+        return string(_result);
     }
 }
