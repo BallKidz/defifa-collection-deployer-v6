@@ -29,6 +29,7 @@ import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataRes
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IDefifaHook} from "./interfaces/IDefifaHook.sol";
 import {IDefifaGamePhaseReporter} from "./interfaces/IDefifaGamePhaseReporter.sol";
 import {IDefifaGamePotReporter} from "./interfaces/IDefifaGamePotReporter.sol";
@@ -40,6 +41,7 @@ import {DefifaHookLib} from "./libraries/DefifaHookLib.sol";
 /// @notice A hook that transforms Juicebox treasury interactions into a Defifa game.
 contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     using Checkpoints for Checkpoints.Trace208;
+    using SafeERC20 for IERC20;
 
     //*********************************************************************//
     // --------------------------- custom errors ------------------------- //
@@ -101,6 +103,15 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// @notice The cumulative mint price of all tokens (paid and reserved). Used as the denominator for fee token
     /// ($DEFIFA/$NANA) distribution.
     uint256 internal _totalMintCost;
+
+    /// @notice The tracked $DEFIFA token balance, snapshotted when cash-out weights are set and decremented on claims.
+    /// @dev Prevents direct token transfers (donations) from inflating claims.
+    uint256 internal _trackedDefifaBalance;
+
+    /// @notice The tracked $BASE_PROTOCOL token balance, snapshotted when cash-out weights are set and decremented on
+    /// claims.
+    /// @dev Prevents direct token transfers (donations) from inflating claims.
+    uint256 internal _trackedBaseProtocolBalance;
 
     //*********************************************************************//
     // ---------------- public immutable stored properties --------------- //
@@ -295,6 +306,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens this game was allocated from paying the network fee.
+    /// @dev Returns tracked balances (snapshotted at weight-set time) if available, otherwise raw balances.
     /// @return defifaTokenAllocation The $DEFIFA token allocation.
     /// @return baseProtocolTokenAllocation The $BASE_PROTOCOL token allocation.
     function tokenAllocations()
@@ -302,8 +314,10 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         view
         returns (uint256 defifaTokenAllocation, uint256 baseProtocolTokenAllocation)
     {
-        defifaTokenAllocation = defifaToken.balanceOf(address(this));
-        baseProtocolTokenAllocation = baseProtocolToken.balanceOf(address(this));
+        // Use tracked balances if they have been snapshotted, otherwise fall back to raw balances.
+        defifaTokenAllocation = cashOutWeightIsSet ? _trackedDefifaBalance : defifaToken.balanceOf(address(this));
+        baseProtocolTokenAllocation =
+            cashOutWeightIsSet ? _trackedBaseProtocolBalance : baseProtocolToken.balanceOf(address(this));
     }
 
     /// @notice The data calculated before a cash out is recorded in the terminal store. This data is provided to the
@@ -369,6 +383,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     }
 
     /// @notice The amount of $DEFIFA and $BASE_PROTOCOL tokens claimable for a set of token IDs.
+    /// @dev Uses tracked balances (snapshotted at weight-set time) to prevent donation inflation.
     /// @param tokenIds The IDs of the tokens that justify a $DEFIFA claim.
     /// @return defifaTokenAmount The amount of $DEFIFA that can be claimed.
     /// @return baseProtocolTokenAmount The amount of $BASE_PROTOCOL that can be claimed.
@@ -386,8 +401,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             _store: store,
             hook: address(this),
             totalMintCost: _totalMintCost,
-            defifaBalance: defifaToken.balanceOf(address(this)),
-            baseProtocolBalance: baseProtocolToken.balanceOf(address(this))
+            defifaBalance: _trackedDefifaBalance,
+            baseProtocolBalance: _trackedBaseProtocolBalance
         });
     }
 
@@ -618,6 +633,10 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Validate weights and build the array. Reverts on invalid input.
         _tierCashOutWeights =
             DefifaHookLib.validateAndBuildWeights({tierWeights: tierWeights, _store: store, hook: address(this)});
+
+        // Snapshot the fee token balances so that direct transfers (donations) cannot inflate claims.
+        _trackedDefifaBalance = defifaToken.balanceOf(address(this));
+        _trackedBaseProtocolBalance = baseProtocolToken.balanceOf(address(this));
 
         // Mark the cashOut weight as set.
         cashOutWeightIsSet = true;
@@ -989,7 +1008,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         }
     }
 
-    /// @notice Claims the defifa and base protocol tokens for a beneficiary.
+    /// @notice Claims the defifa and base protocol tokens for a beneficiary using tracked balances.
+    /// @dev Uses `_trackedDefifaBalance` and `_trackedBaseProtocolBalance` instead of `balanceOf` to prevent
+    /// direct token transfers (donations) from inflating claims. Decrements tracked balances as tokens are sent.
     /// @param _beneficiary The address to claim tokens for.
     /// @param shareToBeneficiary The share relative to the `outOfTotal` to send the user.
     /// @param outOfTotal The total share that the `shareToBeneficiary` is relative to.
@@ -1002,13 +1023,23 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         internal
         returns (bool beneficiaryReceivedTokens)
     {
-        return DefifaHookLib.claimTokensFor({
-            _beneficiary: _beneficiary,
-            shareToBeneficiary: shareToBeneficiary,
-            outOfTotal: outOfTotal,
-            _defifaToken: defifaToken,
-            _baseProtocolToken: baseProtocolToken
-        });
+        // Calculate the share of fee tokens to send using tracked (donation-proof) balances.
+        uint256 _defifaAmount = _trackedDefifaBalance * shareToBeneficiary / outOfTotal;
+        uint256 _baseProtocolAmount = _trackedBaseProtocolBalance * shareToBeneficiary / outOfTotal;
+
+        // Decrement tracked balances and transfer.
+        if (_defifaAmount != 0) {
+            _trackedDefifaBalance -= _defifaAmount;
+            defifaToken.safeTransfer(_beneficiary, _defifaAmount);
+        }
+        if (_baseProtocolAmount != 0) {
+            _trackedBaseProtocolBalance -= _baseProtocolAmount;
+            baseProtocolToken.safeTransfer(_beneficiary, _baseProtocolAmount);
+        }
+
+        emit ClaimedTokens(_beneficiary, _defifaAmount, _baseProtocolAmount, msg.sender);
+
+        return (_defifaAmount != 0 || _baseProtocolAmount != 0);
     }
 
     /// @notice Before transferring an NFT, register its first owner (if necessary).
