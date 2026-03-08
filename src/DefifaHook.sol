@@ -15,6 +15,8 @@ import {JBAfterPayRecordedContext} from "@bananapus/core-v6/src/structs/JBAfterP
 import {JBBeforeCashOutRecordedContext} from "@bananapus/core-v6/src/structs/JBBeforeCashOutRecordedContext.sol";
 import {JBCashOutHookSpecification} from "@bananapus/core-v6/src/structs/JBCashOutHookSpecification.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBBeforePayRecordedContext} from "@bananapus/core-v6/src/structs/JBBeforePayRecordedContext.sol";
+import {JBPayHookSpecification} from "@bananapus/core-v6/src/structs/JBPayHookSpecification.sol";
 import {JB721Hook} from "@bananapus/721-hook-v6/src/abstract/JB721Hook.sol";
 import {IJB721TiersHookStore} from "@bananapus/721-hook-v6/src/interfaces/IJB721TiersHookStore.sol";
 import {IJB721TokenUriResolver} from "@bananapus/721-hook-v6/src/interfaces/IJB721TokenUriResolver.sol";
@@ -304,6 +306,28 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     {
         defifaTokenAllocation = defifaToken.balanceOf(address(this));
         baseProtocolTokenAllocation = baseProtocolToken.balanceOf(address(this));
+    }
+
+    /// @notice The data calculated before a payment is recorded in the terminal store.
+    /// @dev Calculates split amounts to forward based on tier split percentages.
+    /// @param context The payment context.
+    /// @return weight The weight to use for token minting.
+    /// @return hookSpecifications The hook specifications, with the split amount to forward.
+    function beforePayRecordedWith(JBBeforePayRecordedContext calldata context)
+        public
+        view
+        virtual
+        override(IJBRulesetDataHook, JB721Hook)
+        returns (uint256 weight, JBPayHookSpecification[] memory hookSpecifications)
+    {
+        weight = context.weight;
+        hookSpecifications = new JBPayHookSpecification[](1);
+
+        // Calculate per-tier split amounts.
+        (uint256 totalSplitAmount, bytes memory splitMetadata) =
+            DefifaHookLib.computeSplitAmounts(store, address(this), codeOrigin, context.metadata);
+
+        hookSpecifications[0] = JBPayHookSpecification({hook: this, amount: totalSplitAmount, metadata: splitMetadata});
     }
 
     /// @notice The data calculated before a cash out is recorded in the terminal store. This data is provided to the

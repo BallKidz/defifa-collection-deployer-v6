@@ -6,6 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IJB721TiersHookStore} from "@bananapus/721-hook-v6/src/interfaces/IJB721TiersHookStore.sol";
 import {JB721Tier} from "@bananapus/721-hook-v6/src/structs/JB721Tier.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
 import {DefifaTierCashOutWeight} from "../structs/DefifaTierCashOutWeight.sol";
 import {DefifaGamePhase} from "../enums/DefifaGamePhase.sol";
 
@@ -322,6 +324,55 @@ library DefifaHookLib {
             tierIds[count] = _currentTierId;
             attestationAmounts[count] = _accumulated;
             count++;
+        }
+    }
+
+    /// @notice Compute the total split amount and per-tier breakdown for a Defifa payment.
+    /// @param _store The 721 tiers hook store.
+    /// @param hook The hook address.
+    /// @param metadataTarget The target address for metadata ID resolution.
+    /// @param metadata The raw payment metadata.
+    /// @return totalSplitAmount The total amount to forward to splits.
+    /// @return splitMetadata Encoded (uint16[] tierIds, uint256[] amounts) for distribution.
+    function computeSplitAmounts(
+        IJB721TiersHookStore _store,
+        address hook,
+        address metadataTarget,
+        bytes calldata metadata
+    )
+        external
+        view
+        returns (uint256 totalSplitAmount, bytes memory splitMetadata)
+    {
+        // Resolve the pay metadata.
+        (bool found, bytes memory data) =
+            JBMetadataResolver.getDataFor(JBMetadataResolver.getId("pay", metadataTarget), metadata);
+        if (!found) return (0, bytes(""));
+
+        // Decode Defifa-format metadata: (attestationDelegate, tierIdsToMint).
+        (, uint16[] memory tierIdsToMint) = abi.decode(data, (address, uint16[]));
+        if (tierIdsToMint.length == 0) return (0, bytes(""));
+
+        uint16[] memory splitTierIds = new uint16[](tierIdsToMint.length);
+        uint256[] memory splitAmounts = new uint256[](tierIdsToMint.length);
+        uint256 splitTierCount;
+
+        for (uint256 i; i < tierIdsToMint.length; i++) {
+            JB721Tier memory tier = _store.tierOf(hook, tierIdsToMint[i], false);
+            if (tier.splitPercent != 0) {
+                splitTierIds[splitTierCount] = tierIdsToMint[i];
+                splitAmounts[splitTierCount] = mulDiv(tier.price, tier.splitPercent, JBConstants.SPLITS_TOTAL_PERCENT);
+                totalSplitAmount += splitAmounts[splitTierCount];
+                splitTierCount++;
+            }
+        }
+
+        if (splitTierCount != 0) {
+            assembly {
+                mstore(splitTierIds, splitTierCount)
+                mstore(splitAmounts, splitTierCount)
+            }
+            splitMetadata = abi.encode(splitTierIds, splitAmounts);
         }
     }
 
