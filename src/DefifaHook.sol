@@ -26,6 +26,7 @@ import {
 import {JB721Tier} from "@bananapus/721-hook-v6/src/structs/JB721Tier.sol";
 import {JB721TierConfig} from "@bananapus/721-hook-v6/src/structs/JB721TierConfig.sol";
 import {JB721TiersMintReservesConfig} from "@bananapus/721-hook-v6/src/structs/JB721TiersMintReservesConfig.sol";
+import {JB721TiersHookLib} from "@bananapus/721-hook-v6/src/libraries/JB721TiersHookLib.sol";
 
 import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
 import {DefifaDelegation} from "./structs/DefifaDelegation.sol";
@@ -459,7 +460,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         // Make sure the caller is a terminal of the project, and that the call is being made on behalf of an
         // interaction with the correct project.
         if (
-            msg.value != 0 || !DIRECTORY.isTerminalOf({projectId: projectId, terminal: IJBTerminal(msg.sender)})
+            !DIRECTORY.isTerminalOf({projectId: projectId, terminal: IJBTerminal(msg.sender)})
                 || context.projectId != projectId
         ) revert JB721Hook_InvalidPay();
 
@@ -855,6 +856,13 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
         // Make sure the buyer isn't overspending.
         if (_leftoverAmount != 0) revert DefifaHook_Overspending();
+
+        // Distribute any forwarded funds to tier split groups.
+        if (context.hookMetadata.length != 0 && context.forwardedAmount.value != 0) {
+            JB721TiersHookLib.distributeAll(
+                DIRECTORY, PROJECT_ID, address(this), context.forwardedAmount.token, context.hookMetadata
+            );
+        }
     }
 
     /// @notice Gets the amount of attestation units an address has for a particular tier.
