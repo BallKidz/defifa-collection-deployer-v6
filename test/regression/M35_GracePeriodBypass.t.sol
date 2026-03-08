@@ -143,9 +143,8 @@ contract M35_GracePeriodBypass is JBTest, TestBaseWorkflow {
         uint256 futureAttestationStart = block.timestamp + 10 days;
         uint256 gracePeriod = 1 days;
 
-        DefifaLaunchProjectData memory defifaData = _getBasicLaunchDataWithAttestationTiming(
-            nTiers, futureAttestationStart, gracePeriod
-        );
+        DefifaLaunchProjectData memory defifaData =
+            _getBasicLaunchDataWithAttestationTiming(nTiers, futureAttestationStart, gracePeriod);
         (uint256 _projectId, DefifaHook _nft, DefifaGovernor _governor) = _createProject(defifaData);
 
         // Phase 1: Mint
