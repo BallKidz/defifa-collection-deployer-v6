@@ -311,6 +311,7 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
                 uint48(block.timestamp + launchProjectData.mintPeriodDuration + launchProjectData.refundPeriodDuration);
         }
         // Start minting right away if a start time isn't provided.
+        // slither-disable-next-line incorrect-equality
         else if (
             launchProjectData.mintPeriodDuration == 0
                 && launchProjectData.start > block.timestamp + launchProjectData.refundPeriodDuration
