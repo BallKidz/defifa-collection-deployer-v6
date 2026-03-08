@@ -459,8 +459,13 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
         // slither-disable-next-line unused-return
         Address.verifyCallResult({success: success, returndata: returndata});
 
-        // Fulfill any commitments for the game.
-        IDefifaDeployer(controller.PROJECTS().ownerOf(gameId)).fulfillCommitmentsOf(gameId);
+        // Fulfill any commitments for the game. Wrapped in try-catch so that a fulfillment
+        // failure (e.g. from sendPayoutsOf reverting) does not permanently block ratification.
+        // Fulfillment can be retried separately by calling fulfillCommitmentsOf directly.
+        try IDefifaDeployer(controller.PROJECTS().ownerOf(gameId)).fulfillCommitmentsOf(gameId) {}
+        catch (bytes memory reason) {
+            emit FulfillmentFailed(gameId, reason);
+        }
 
         emit ScorecardRatified(gameId, scorecardId, msg.sender);
     }

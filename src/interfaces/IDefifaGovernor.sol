@@ -24,6 +24,8 @@ interface IDefifaGovernor {
 
     event ScorecardRatified(uint256 indexed gameId, uint256 indexed scorecardId, address caller);
 
+    event FulfillmentFailed(uint256 indexed gameId, bytes reason);
+
     /// @notice The maximum tier ID that contributes attestation power.
     /// @return The maximum attestation power tier.
     function MAX_ATTESTATION_POWER_TIER() external view returns (uint256);
