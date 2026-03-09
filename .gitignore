@@ -6,3 +6,4 @@ cache
 node_modules
 lib/forge-std/
 out/
+.claude/
