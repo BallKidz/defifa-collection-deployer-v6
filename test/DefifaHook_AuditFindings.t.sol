@@ -128,7 +128,7 @@ contract DefifaHook_AuditFindings is JBTest, TestBaseWorkflow {
         governor.transferOwnership(address(deployer));
     }
 
-    /// @notice M-5: Attestation units must be preserved when transferring an NFT to an undelegated recipient.
+    /// @notice Attestation units must be preserved when transferring an NFT to an undelegated recipient.
     /// @dev Before the fix, transferring to a recipient with no delegate set would cause attestation units to vanish:
     ///      the sender's delegate lost units but no delegate gained them (because address(0) was skipped).
     ///      After the fix, the recipient auto-delegates to themselves, preserving total attestation power.
@@ -236,7 +236,7 @@ contract DefifaHook_AuditFindings is JBTest, TestBaseWorkflow {
         assertEq(sumOfDelegates, totalAfter, "Sum of all delegate attestation units must equal total supply");
     }
 
-    /// @notice M-5 additional: multiple sequential transfers to undelegated recipients should all preserve units.
+    /// @notice Multiple sequential transfers to undelegated recipients should all preserve units.
     function test_M5_multipleTransfersToUndelegatedRecipientsPreserveUnits() public {
         uint8 nTiers = 2;
         address playerA = address(bytes20(keccak256("playerA")));
