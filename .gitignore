@@ -6,3 +6,10 @@ cache
 node_modules
 lib/forge-std/
 out/
+
+# Audit/nemesis output
+.audit/
+.audit-logs/
+AUDIT_FINDINGS.md
+NEMESIS_SCOPE.md
+run-nemesis-all.sh
