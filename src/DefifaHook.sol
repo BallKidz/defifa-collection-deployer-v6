@@ -996,12 +996,18 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             }
         }
 
+        // Resolve the recipient's delegate. If the recipient has no delegate set, auto-delegate to themselves to
+        // prevent attestation units from being permanently lost.
+        address _toDelegate = _tierDelegation[_to][_tierId];
+        if (_toDelegate == address(0) && _to != address(0)) {
+            _toDelegate = _to;
+            _tierDelegation[_to][_tierId] = _to;
+            emit DelegateChanged(_to, address(0), _to);
+        }
+
         // Move delegated attestations.
         _moveTierDelegateAttestations({
-            _from: _tierDelegation[_from][_tierId],
-            _to: _tierDelegation[_to][_tierId],
-            _tierId: _tierId,
-            _amount: _amount
+            _from: _tierDelegation[_from][_tierId], _to: _toDelegate, _tierId: _tierId, _amount: _amount
         });
     }
 
