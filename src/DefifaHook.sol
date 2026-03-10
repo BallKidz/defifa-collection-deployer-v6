@@ -532,6 +532,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
     /// @notice Mint reserved tokens within the tier for the provided value.
     /// @param tierId The ID of the tier to mint within.
     /// @param count The number of reserved tokens to mint.
+    // slither-disable-next-line reentrancy-no-eth
     function mintReservesFor(uint256 tierId, uint256 count) public override {
         // Minting reserves must not be paused.
         if (JB721TiersRulesetMetadataResolver.mintPendingReservesPaused(

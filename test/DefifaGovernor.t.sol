@@ -444,8 +444,8 @@ contract DefifaGovernorTest is JBTest, TestBaseWorkflow {
     }
 
     function testSetCashOutRatesAndRedeem_multipleTiers(uint8 nTiers, uint8[] calldata distribution) public {
-        vm.assume(nTiers > 10 && nTiers < 100);
-        vm.assume(distribution.length < nTiers);
+        nTiers = uint8(bound(uint256(nTiers), 11, 99));
+        vm.assume(distribution.length > 0 && distribution.length < nTiers);
 
         uint256 _sumDistribution;
         for (uint256 i = 0; i < distribution.length; i++) {

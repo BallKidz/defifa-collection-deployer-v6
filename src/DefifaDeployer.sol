@@ -411,8 +411,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         }
 
         // Make sure the provided gameplay timestamps are sequential and that there is a mint duration.
-        // slither-disable-next-line incorrect-equality
         if (
+            // slither-disable-next-line incorrect-equality
             launchProjectData.mintPeriodDuration == 0
                 || launchProjectData.start
                     < block.timestamp + launchProjectData.refundPeriodDuration + launchProjectData.mintPeriodDuration

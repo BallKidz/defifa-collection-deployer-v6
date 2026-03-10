@@ -6,18 +6,8 @@ optimizer_runs = 200
 libs = ["node_modules", "lib"]
 fs_permissions = [{ access = "read-write", path = "./"}]
 
-[profile.ci_sizes]
-optimizer_runs = 200
-
 [rpc_endpoints]
 ethereum = "${RPC_ETHEREUM_MAINNET}"
-optimism = "${RPC_OPTIMISM_MAINNET}"
-arbitrum = "${RPC_ARBITRUM_MAINNET}"
-base = "${RPC_BASE_MAINNET}"
-arbitrum_sepolia = "${RPC_ARBITRUM_SEPOLIA}"
-ethereum_sepolia = "${RPC_ETHEREUM_SEPOLIA}"
-optimism_sepolia = "${RPC_OPTIMISM_SEPOLIA}"
-base_sepolia = "${RPC_BASE_SEPOLIA}"
 
 [fuzz]
 runs = 4096
@@ -26,6 +16,9 @@ runs = 4096
 runs = 1024
 depth = 100
 fail_on_revert = false
+
+[lint]
+lint_on_build = false
 
 [fmt]
 number_underscore = "thousands"

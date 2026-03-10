@@ -2,7 +2,7 @@
 
 How we write Solidity and organize repos across the Juicebox V6 ecosystem. `nana-core-v6` is the gold standard — when in doubt, match what it does.
 
-**This repo's deviations:** `via-ir = true`, `build_info = true`, `extra_output = ['storageLayout']`. Lower invariant runs (256/depth 50). Package scope: `@ballkidz/`.
+**This repo's deviations:** `via_ir = true` (stack depth). Package scope: `@ballkidz/`.
 
 ## File Organization
 
@@ -326,7 +326,7 @@ try hook.afterPayRecordedWith(context) {} catch (bytes memory reason) {
 
 ### foundry.toml
 
-Standard config across all repos:
+Standard config for `@bananapus/core-v6`:
 
 ```toml
 [profile.default]
@@ -353,18 +353,7 @@ multiline_func_header = "all"
 wrap_comments = true
 ```
 
-**Variations:**
-- `evm_version = 'cancun'` for repos using transient storage (buyback-hook, router-terminal, univ4-router)
-- `via_ir = true` for repos hitting stack-too-deep (buyback-hook, banny-retail, univ4-lp-split-hook, deploy-all)
-- `optimizer = false` only for deploy-all-v6 (stack-too-deep with optimization)
-
-**This repo uses:**
-- `via-ir = true` (note: hyphen not underscore in this repo's foundry.toml)
-- `build_info = true`, `extra_output = ['storageLayout']`
-- `[rpc_endpoints]` for ethereum, optimism, arbitrum, base, and their testnets
-- `[invariant]` with `runs = 256`, `depth = 50` (lower than standard)
-- No `[fuzz]` section
-- `[lint]` section with `lint_on_build = false`
+This is the standard config with no deviations.
 
 ### CI Workflows
 
@@ -394,8 +383,6 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
       - name: Run tests
         run: forge test --fail-fast --summary --detailed --skip "*/script/**"
-        env:
-          RPC_ETHEREUM_MAINNET: ${{ secrets.RPC_ETHEREUM_MAINNET }}
       - name: Check contract sizes
         run: FOUNDRY_PROFILE=ci_sizes forge build --sizes --skip "*/test/**" --skip "*/script/**" --skip SphinxUtils
 ```
@@ -423,10 +410,10 @@ jobs:
 
 ```json
 {
-  "name": "@ballkidz/defifa",
+  "name": "@bananapus/core-v6",
   "version": "x.x.x",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/Org/repo.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/Bananapus/nana-core-v6.git" },
   "engines": { "node": ">=20.0.0" },
   "scripts": {
     "test": "forge test",
@@ -459,15 +446,6 @@ Run `forge fmt` before committing. The `[fmt]` config in `foundry.toml` enforces
 - Wrapped comments at reasonable width
 
 CI checks formatting via `forge fmt --check`.
-
-### CI Secrets
-
-| Secret | Purpose |
-|--------|--------|
-| `NPM_TOKEN` | npm publish access (used by `publish.yml`) |
-| `RPC_ETHEREUM_MAINNET` | Ethereum mainnet RPC URL for fork tests (used by `test.yml`) |
-
-Fork tests require `RPC_ETHEREUM_MAINNET` — they fail if it's missing.
 
 ### Branching
 
