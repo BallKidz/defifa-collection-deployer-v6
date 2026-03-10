@@ -1,6 +1,1 @@
-@openzeppelin/=node_modules/@openzeppelin/
-@prb/math/=node_modules/@prb/math/
-@bananapus/=node_modules/@bananapus/
-@sphinx-labs/contracts/=node_modules/@sphinx-labs/contracts/contracts/foundry/
 forge-std/=lib/forge-std/src/
-scripty.sol/=node_modules/scripty.sol/
