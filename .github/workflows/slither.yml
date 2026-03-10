@@ -20,8 +20,11 @@ jobs:
         run: npm install --omit=dev
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+      - name: Build with build-info
+        run: forge build --build-info --skip ./test/** ./script/** --force
       - name: Run slither
         uses: crytic/slither-action@v0.3.1
         with:
             slither-config: slither-ci.config.json
             fail-on: medium
+            compile: none
