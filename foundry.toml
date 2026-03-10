@@ -17,8 +17,8 @@ runs = 1024
 depth = 100
 fail_on_revert = false
 
-[lint]
-lint_on_build = false
+[profile.ci_sizes]
+optimizer_runs = 200
 
 [fmt]
 number_underscore = "thousands"

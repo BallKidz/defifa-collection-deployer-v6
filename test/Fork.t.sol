@@ -59,19 +59,8 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     DefifaGovernor _gov;
     address[] _users;
 
-    modifier onlyFork() {
-        string memory rpcUrl = vm.envOr("RPC_ETHEREUM_MAINNET", string(""));
-        if (bytes(rpcUrl).length == 0) {
-            vm.skip(true);
-            return;
-        }
-        _;
-    }
-
     function setUp() public virtual override {
-        string memory rpcUrl = vm.envOr("RPC_ETHEREUM_MAINNET", string(""));
-        if (bytes(rpcUrl).length == 0) return;
-        vm.createSelectFork(rpcUrl);
+        vm.createSelectFork("ethereum");
 
         // Deploy JB core fresh on fork.
         super.setUp();
@@ -156,7 +145,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // FULL LIFECYCLE: Mint → Refund → Score → Ratify → Cash Out
     // =========================================================================
 
-    function test_fork_fullLifecycle_4tiers() external onlyFork {
+    function test_fork_fullLifecycle_4tiers() external {
         _setupGame(4, 1 ether);
 
         // Verify MINT phase.
@@ -208,7 +197,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // REFUND PHASE: Full refund during MINT, partial refund patterns
     // =========================================================================
 
-    function test_fork_refundDuringMint_exactPrice() external onlyFork {
+    function test_fork_refundDuringMint_exactPrice() external {
         _setupGame(8, 2 ether);
 
         // Refund first 4 users during MINT.
@@ -223,7 +212,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
         assertEq(_balance(), 8 ether, "pot = remaining mints");
     }
 
-    function test_fork_refundDuringRefundPhase() external onlyFork {
+    function test_fork_refundDuringRefundPhase() external {
         _setupGame(4, 1 ether);
 
         // Advance past MINT into REFUND phase.
@@ -240,7 +229,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // HIGH VOLUME: 32 tiers × 100 ETH each = 3,200 ETH pot
     // =========================================================================
 
-    function test_fork_highVolume_32tiers_100eth() external onlyFork {
+    function test_fork_highVolume_32tiers_100eth() external {
         _setupGame(32, 100 ether);
         _toScoring();
 
@@ -273,7 +262,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EXTREME ROUNDING: 1 wei weights, 1000 ETH per tier
     // =========================================================================
 
-    function test_fork_extremeWeights_1weiAnd999999() external onlyFork {
+    function test_fork_extremeWeights_1weiAnd999999() external {
         _setupGame(3, 1000 ether);
         _toScoring();
 
@@ -293,7 +282,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // MULTI-PLAYER PER TIER: 5 winners, 3 losers
     // =========================================================================
 
-    function test_fork_multiPlayerPerTier_winnerTakeAll() external onlyFork {
+    function test_fork_multiPlayerPerTier_winnerTakeAll() external {
         _setupMultiPlayer();
         _toScoring();
 
@@ -326,7 +315,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Overweight scorecard (120%) rejected
     // =========================================================================
 
-    function test_fork_rejectsOverweightScorecard() external onlyFork {
+    function test_fork_rejectsOverweightScorecard() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -345,7 +334,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Underweight scorecard (80%) rejected
     // =========================================================================
 
-    function test_fork_rejectsUnderweightScorecard() external onlyFork {
+    function test_fork_rejectsUnderweightScorecard() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -364,7 +353,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Double attestation attempt
     // =========================================================================
 
-    function test_fork_doubleAttestationReverts() external onlyFork {
+    function test_fork_doubleAttestationReverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -386,7 +375,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Duplicate scorecard submission reverts
     // =========================================================================
 
-    function test_fork_duplicateScorecardReverts() external onlyFork {
+    function test_fork_duplicateScorecardReverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -401,7 +390,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Double ratification reverts
     // =========================================================================
 
-    function test_fork_doubleRatificationReverts() external onlyFork {
+    function test_fork_doubleRatificationReverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -416,7 +405,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Cash out weights set twice reverts
     // =========================================================================
 
-    function test_fork_cashOutWeightsAlreadySetReverts() external onlyFork {
+    function test_fork_cashOutWeightsAlreadySetReverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -436,7 +425,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Delegation blocked after MINT phase
     // =========================================================================
 
-    function test_fork_delegationBlockedAfterMint() external onlyFork {
+    function test_fork_delegationBlockedAfterMint() external {
         _setupGame(4, 1 ether);
 
         // Advance to REFUND phase.
@@ -458,7 +447,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Cash out before scorecard — reverts (nothing to claim)
     // =========================================================================
 
-    function test_fork_cashOutBeforeScorecard_reverts() external onlyFork {
+    function test_fork_cashOutBeforeScorecard_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -484,7 +473,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Non-holder tries to cash out someone else's NFT
     // =========================================================================
 
-    function test_fork_nonHolderCashOutReverts() external onlyFork {
+    function test_fork_nonHolderCashOutReverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -513,7 +502,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Scorecard with weight on unminted tier reverts
     // =========================================================================
 
-    function test_fork_weightOnUnmintedTierReverts() external onlyFork {
+    function test_fork_weightOnUnmintedTierReverts() external {
         // Launch 8-tier game but only mint 4 tiers.
         _setupPartial(8, 4, 1 ether);
         _toScoring();
@@ -535,7 +524,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Scorecard submission outside SCORING phase
     // =========================================================================
 
-    function test_fork_scorecardSubmitOutsideScoring_reverts() external onlyFork {
+    function test_fork_scorecardSubmitOutsideScoring_reverts() external {
         _setupGame(4, 1 ether);
 
         // Still in MINT phase.
@@ -551,7 +540,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Attestation outside SCORING phase (during COMPLETE)
     // =========================================================================
 
-    function test_fork_attestationAfterRatification_reverts() external onlyFork {
+    function test_fork_attestationAfterRatification_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -574,7 +563,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: NFT transfer then try to double-vote
     // =========================================================================
 
-    function test_fork_nftTransferDoesNotDoubleVote() external onlyFork {
+    function test_fork_nftTransferDoesNotDoubleVote() external {
         _setupGame(4, 1 ether);
 
         // user[0] transfers their NFT to user[1] (who already has tier 2)
@@ -620,7 +609,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Competing scorecards — only one can be ratified
     // =========================================================================
 
-    function test_fork_competingScorecards_onlyOneRatified() external onlyFork {
+    function test_fork_competingScorecards_onlyOneRatified() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -647,7 +636,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: fulfillCommitmentsOf double-call (idempotent)
     // =========================================================================
 
-    function test_fork_doubleFulfillment_idempotent() external onlyFork {
+    function test_fork_doubleFulfillment_idempotent() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -666,7 +655,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: fulfillCommitmentsOf before ratification reverts
     // =========================================================================
 
-    function test_fork_fulfillBeforeRatification_reverts() external onlyFork {
+    function test_fork_fulfillBeforeRatification_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -678,7 +667,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // GOVERNANCE: Quorum calculation with partial minting
     // =========================================================================
 
-    function test_fork_quorum_partialMinting() external onlyFork {
+    function test_fork_quorum_partialMinting() external {
         _setupPartial(10, 6, 1 ether);
         uint256 expected = (6 * _gov.MAX_ATTESTATION_POWER_TIER()) / 2;
         assertEq(_gov.quorum(_gameId), expected, "quorum = 50% of minted tiers");
@@ -688,7 +677,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // GOVERNANCE: Single-tier game (minimum viable game)
     // =========================================================================
 
-    function test_fork_singleTierGame() external onlyFork {
+    function test_fork_singleTierGame() external {
         DefifaLaunchProjectData memory d = _launchData(1, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -717,7 +706,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // NO CONTEST: minParticipation threshold triggers NO_CONTEST
     // =========================================================================
 
-    function test_fork_noContest_minParticipation() external onlyFork {
+    function test_fork_noContest_minParticipation() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 5 ether, 0);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -736,7 +725,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // NO CONTEST: scorecardTimeout triggers NO_CONTEST
     // =========================================================================
 
-    function test_fork_noContest_scorecardTimeout() external onlyFork {
+    function test_fork_noContest_scorecardTimeout() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 0, 7 days);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -761,7 +750,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // NO CONTEST: triggerNoContestFor + full refund
     // =========================================================================
 
-    function test_fork_noContest_triggerAndRefund() external onlyFork {
+    function test_fork_noContest_triggerAndRefund() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 2 ether, 0, 7 days);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -792,7 +781,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // NO CONTEST: Double trigger reverts
     // =========================================================================
 
-    function test_fork_noContest_doubleTriggerReverts() external onlyFork {
+    function test_fork_noContest_doubleTriggerReverts() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 0, 7 days);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -813,7 +802,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // NO CONTEST: triggerNoContest outside NO_CONTEST phase reverts
     // =========================================================================
 
-    function test_fork_noContest_triggerWhenScoring_reverts() external onlyFork {
+    function test_fork_noContest_triggerWhenScoring_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -825,7 +814,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // NO CONTEST: Ratified scorecard prevents NO_CONTEST forever
     // =========================================================================
 
-    function test_fork_ratifiedPreventsNoContest() external onlyFork {
+    function test_fork_ratifiedPreventsNoContest() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 0, 7 days);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -853,7 +842,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // FEE ACCOUNTING: Default splits (no user splits)
     // =========================================================================
 
-    function test_fork_feeAccounting_defaultSplits() external onlyFork {
+    function test_fork_feeAccounting_defaultSplits() external {
         _setupGame(4, 1 ether);
 
         uint256 potBefore = _balance();
@@ -875,7 +864,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // FEE ACCOUNTING: fee + surplus = original pot (zero rounding loss)
     // =========================================================================
 
-    function test_fork_feeAccounting_noRoundingLoss() external onlyFork {
+    function test_fork_feeAccounting_noRoundingLoss() external {
         _setupGame(4, 1 ether);
 
         uint256 potBefore = _balance();
@@ -892,7 +881,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // FEE ACCOUNTING: With user-provided custom splits
     // =========================================================================
 
-    function test_fork_feeAccounting_withUserSplits() external onlyFork {
+    function test_fork_feeAccounting_withUserSplits() external {
         JBSplit[] memory customSplits = new JBSplit[](1);
         address charity = address(bytes20(keccak256("charity")));
         customSplits[0] = JBSplit({
@@ -932,7 +921,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // FEE TOKENS: Reserved minters get proportional $DEFIFA/$NANA
     // =========================================================================
 
-    function test_fork_reservedMintersGetFeeTokens() external onlyFork {
+    function test_fork_reservedMintersGetFeeTokens() external {
         address reserveAddr = address(bytes20(keccak256("reserveBeneficiary")));
 
         DefifaTierParams[] memory tp = new DefifaTierParams[](2);
@@ -1059,7 +1048,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // CASH OUT ORDERING: First vs last to exit — fair distribution
     // =========================================================================
 
-    function test_fork_cashOutOrdering_fairAcrossExitOrder() external onlyFork {
+    function test_fork_cashOutOrdering_fairAcrossExitOrder() external {
         _setupGame(4, 10 ether);
         _toScoring();
 
@@ -1083,7 +1072,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // GAME POT REPORTING: currentGamePotOf accuracy
     // =========================================================================
 
-    function test_fork_gamePotReporting() external onlyFork {
+    function test_fork_gamePotReporting() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1105,7 +1094,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // PHASE TRANSITIONS: Correct sequence
     // =========================================================================
 
-    function test_fork_phaseTransitions_correctSequence() external onlyFork {
+    function test_fork_phaseTransitions_correctSequence() external {
         DefifaLaunchProjectData memory d = _launchData(4, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
 
@@ -1129,7 +1118,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // GAME TIMES: timesFor view returns correct values
     // =========================================================================
 
-    function test_fork_timesFor() external onlyFork {
+    function test_fork_timesFor() external {
         DefifaLaunchProjectData memory d = _launchData(4, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
 
@@ -1143,7 +1132,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: NFT transfer → new owner cashes out, firstOwnerOf preserved
     // =========================================================================
 
-    function test_fork_nftTransfer_newOwnerCashesOut() external onlyFork {
+    function test_fork_nftTransfer_newOwnerCashesOut() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1188,7 +1177,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Intra-tier fairness — 5 holders same tier, sequential cash outs
     // =========================================================================
 
-    function test_fork_intraTierFairness_5holders() external onlyFork {
+    function test_fork_intraTierFairness_5holders() external {
         DefifaLaunchProjectData memory d = _launchData(2, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -1232,7 +1221,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Multi-token cash out — burn 3 NFTs from same tier in one tx
     // =========================================================================
 
-    function test_fork_multiTokenCashOut_sameTier() external onlyFork {
+    function test_fork_multiTokenCashOut_sameTier() external {
         DefifaLaunchProjectData memory d = _launchData(2, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -1298,7 +1287,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Cross-tier cash out — burn tokens from different tiers in one tx
     // =========================================================================
 
-    function test_fork_crossTierCashOut_singleTx() external onlyFork {
+    function test_fork_crossTierCashOut_singleTx() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1337,7 +1326,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Zero-power attestation — non-holder attests with 0 weight
     // =========================================================================
 
-    function test_fork_zeroPowerAttestation() external onlyFork {
+    function test_fork_zeroPowerAttestation() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1365,7 +1354,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Delegation to address(0) via setTierDelegateTo (no validation)
     // =========================================================================
 
-    function test_fork_delegateToZero_viaSetTierDelegateTo() external onlyFork {
+    function test_fork_delegateToZero_viaSetTierDelegateTo() external {
         _setupGame(4, 1 ether);
 
         // setTierDelegateTo allows address(0) — no check (unlike setTierDelegatesTo which reverts).
@@ -1401,7 +1390,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: minParticipation boundary — balance == minParticipation → NO_CONTEST
     // =========================================================================
 
-    function test_fork_minParticipation_exactBoundary_meets() external onlyFork {
+    function test_fork_minParticipation_exactBoundary_meets() external {
         // balance == minParticipation: check uses `<`, so 4 < 4 = false → SCORING.
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 4 ether, 0);
         (_pid, _nft, _gov) = _launch(d);
@@ -1419,7 +1408,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
         assertEq(uint256(deployer.currentGamePhaseOf(_pid)), uint256(DefifaGamePhase.SCORING));
     }
 
-    function test_fork_minParticipation_belowThreshold() external onlyFork {
+    function test_fork_minParticipation_belowThreshold() external {
         // balance < minParticipation → NO_CONTEST.
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 4 ether + 1, 0);
         (_pid, _nft, _gov) = _launch(d);
@@ -1441,7 +1430,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Cash out during SCORING (before weights set) → NothingToClaim
     // =========================================================================
 
-    function test_fork_cashOutDuringScoring_reverts() external onlyFork {
+    function test_fork_cashOutDuringScoring_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1465,7 +1454,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: NFT transfer destroys delegation — new owner can't vote in SCORING
     // =========================================================================
 
-    function test_fork_nftTransfer_recipientGetsAttestationPower() external onlyFork {
+    function test_fork_nftTransfer_recipientGetsAttestationPower() external {
         _setupGame(4, 1 ether);
 
         address recipient = _addr(999);
@@ -1503,7 +1492,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Delegation change reverts outside MINT phase
     // =========================================================================
 
-    function test_fork_delegateDuringScoring_reverts() external onlyFork {
+    function test_fork_delegateDuringScoring_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1518,7 +1507,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Scorecard timeout boundary — exact tick
     // =========================================================================
 
-    function test_fork_scorecardTimeout_exactBoundary() external onlyFork {
+    function test_fork_scorecardTimeout_exactBoundary() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 0, 7 days);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -1554,7 +1543,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Refund then re-mint same tier (user comes back)
     // =========================================================================
 
-    function test_fork_refundThenRemint() external onlyFork {
+    function test_fork_refundThenRemint() external {
         _setupGame(4, 1 ether);
 
         address user = _users[0];
@@ -1577,7 +1566,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Defeated scorecard after another is ratified
     // =========================================================================
 
-    function test_fork_defeatedScorecard_afterRatification() external onlyFork {
+    function test_fork_defeatedScorecard_afterRatification() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1602,7 +1591,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Reserve mint → attestation power
     // =========================================================================
 
-    function test_fork_reserveMint_getsAttestationPower() external onlyFork {
+    function test_fork_reserveMint_getsAttestationPower() external {
         _setupGame(4, 1 ether);
 
         // The reserve beneficiary is address(0) in our default params (no reserved token beneficiary).
@@ -1635,7 +1624,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Quorum with odd number of minted tiers (rounding)
     // =========================================================================
 
-    function test_fork_quorum_oddTierCount() external onlyFork {
+    function test_fork_quorum_oddTierCount() external {
         // 3 tiers minted. Quorum = (3 * MAX_ATTESTATION_POWER_TIER) / 2 = 1.5e9 → rounds to 1_500_000_000.
         _setupGame(3, 1 ether);
         _toScoring();
@@ -1667,7 +1656,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Quorum NOT met with 1 of 5 tiers (below 50%)
     // =========================================================================
 
-    function test_fork_quorum_notMet_1of5() external onlyFork {
+    function test_fork_quorum_notMet_1of5() external {
         // Use 5 tiers so quorum = 5 * MAX / 2 = 2.5e9.
         // A sole holder contributes ~2e9 (due to 2x attestation factor) < 2.5e9 → quorum NOT met.
         _setupGame(5, 1 ether);
@@ -1701,7 +1690,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: NO_CONTEST full cycle — trigger, then all users refund at mint price
     // =========================================================================
 
-    function test_fork_noContest_fullRefundCycle() external onlyFork {
+    function test_fork_noContest_fullRefundCycle() external {
         DefifaLaunchProjectData memory d = _launchDataWith(4, 1 ether, 0, 7 days);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -1739,7 +1728,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Attestation weight shared proportionally within tier
     // =========================================================================
 
-    function test_fork_attestationWeight_proportionalInTier() external onlyFork {
+    function test_fork_attestationWeight_proportionalInTier() external {
         DefifaLaunchProjectData memory d = _launchData(2, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -1797,7 +1786,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Cash out non-owned token ID → Unauthorized
     // =========================================================================
 
-    function test_fork_cashOut_wrongTokenId_reverts() external onlyFork {
+    function test_fork_cashOut_wrongTokenId_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
         _attestAndRatify(_evenScorecard(4));
@@ -1833,7 +1822,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Submit scorecard outside SCORING phase
     // =========================================================================
 
-    function test_fork_submitScorecard_duringMint_reverts() external onlyFork {
+    function test_fork_submitScorecard_duringMint_reverts() external {
         _setupGame(4, 1 ether);
         // Still in MINT phase.
 
@@ -1846,7 +1835,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // EDGE: Two-player precise accounting — winner takes (surplus - dust)
     // =========================================================================
 
-    function test_fork_twoplayer_preciseAccounting() external onlyFork {
+    function test_fork_twoplayer_preciseAccounting() external {
         _setupGame(2, 5 ether);
 
         uint256 totalPot = _balance();
@@ -1877,7 +1866,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // FUZZ: Fund conservation across varying tier/player counts
     // =========================================================================
 
-    function test_fork_fuzz_fundConservation(uint8 rawTiers, uint8 rawPlayers) external onlyFork {
+    function test_fork_fuzz_fundConservation(uint8 rawTiers, uint8 rawPlayers) external {
         uint8 nTiers = uint8(bound(rawTiers, 2, 12));
         uint8 nPPT = uint8(bound(rawPlayers, 1, 3));
 
@@ -1915,7 +1904,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // SCORECARD STATE MACHINE: PENDING → ACTIVE → SUCCEEDED → RATIFIED
     // =========================================================================
 
-    function test_fork_scorecardStateMachine() external onlyFork {
+    function test_fork_scorecardStateMachine() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1951,7 +1940,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // SCORECARD: Ratification before SUCCEEDED state reverts
     // =========================================================================
 
-    function test_fork_ratifyBeforeSucceeded_reverts() external onlyFork {
+    function test_fork_ratifyBeforeSucceeded_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1967,7 +1956,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // SCORECARD: Unknown scorecard reverts
     // =========================================================================
 
-    function test_fork_unknownScorecardState_reverts() external onlyFork {
+    function test_fork_unknownScorecardState_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -1980,7 +1969,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Zero-weight scorecard (all zeros except minimum)
     // =========================================================================
 
-    function test_fork_zeroWeightTiers_winnerTakeAll() external onlyFork {
+    function test_fork_zeroWeightTiers_winnerTakeAll() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -2009,7 +1998,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // ADVERSARIAL: Scorecard tier order violation reverts
     // =========================================================================
 
-    function test_fork_scorecardBadTierOrder_reverts() external onlyFork {
+    function test_fork_scorecardBadTierOrder_reverts() external {
         _setupGame(4, 1 ether);
         _toScoring();
 
@@ -2030,7 +2019,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // MINTING: Multi-tier mint in single transaction
     // =========================================================================
 
-    function test_fork_multiTierMint_singleTx() external onlyFork {
+    function test_fork_multiTierMint_singleTx() external {
         DefifaLaunchProjectData memory d = _launchData(4, 1 ether);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
@@ -2060,7 +2049,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // GRACE PERIOD: Enforced minimum of 1 day
     // =========================================================================
 
-    function test_fork_gracePeriod_minimumEnforced() external onlyFork {
+    function test_fork_gracePeriod_minimumEnforced() external {
         DefifaLaunchProjectData memory d = DefifaLaunchProjectData({
             name: "DEFIFA",
             projectUri: "",
@@ -2092,7 +2081,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     // CASH OUT WEIGHT: totalCashOutWeight() is constant
     // =========================================================================
 
-    function test_fork_totalCashOutWeight_constant() external onlyFork {
+    function test_fork_totalCashOutWeight_constant() external {
         _setupGame(4, 1 ether);
 
         // Before scorecard.
