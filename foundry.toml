@@ -6,7 +6,6 @@ optimizer_runs = 200
 libs = ["node_modules", "lib"]
 remappings = [
     "forge-std/=lib/forge-std/src/",
-    "@sphinx-labs/contracts/=node_modules/@sphinx-labs/contracts/contracts/foundry/",
 ]
 fs_permissions = [{ access = "read-write", path = "./"}]
 
