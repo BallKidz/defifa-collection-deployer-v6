@@ -82,11 +82,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
 
         // Terminal configurations using USDC.
         JBAccountingContext[] memory _tokens = new JBAccountingContext[](1);
-        _tokens[0] = JBAccountingContext({
-            token: address(usdc),
-            decimals: 6,
-            currency: uint32(uint160(address(usdc)))
-        });
+        _tokens[0] = JBAccountingContext({token: address(usdc), decimals: 6, currency: uint32(uint160(address(usdc)))});
         JBTerminalConfig[] memory tc = new JBTerminalConfig[](1);
         tc[0] = JBTerminalConfig({terminal: jbMultiTerminal(), accountingContextsToAccept: _tokens});
 
@@ -147,12 +143,13 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         uint8[] memory permissionIds = new uint8[](1);
         permissionIds[0] = JBPermissionIds.SET_SPLIT_GROUPS;
         vm.prank(projectOwner);
-        jbPermissions().setPermissionsFor(
-            projectOwner,
-            JBPermissionsData({
-                operator: address(deployer), projectId: uint64(_defifaProjectId), permissionIds: permissionIds
-            })
-        );
+        jbPermissions()
+            .setPermissionsFor(
+                projectOwner,
+                JBPermissionsData({
+                    operator: address(deployer), projectId: uint64(_defifaProjectId), permissionIds: permissionIds
+                })
+            );
 
         hook.transferOwnership(address(deployer));
         governor.transferOwnership(address(deployer));
@@ -191,11 +188,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
             projectUri: "",
             contractUri: "",
             baseUri: "",
-            token: JBAccountingContext({
-                token: address(usdc),
-                decimals: 6,
-                currency: uint32(uint160(address(usdc)))
-            }),
+            token: JBAccountingContext({token: address(usdc), decimals: 6, currency: uint32(uint160(address(usdc)))}),
             mintPeriodDuration: 1 days,
             start: uint48(block.timestamp + 3 days),
             refundPeriodDuration: 1 days,
@@ -235,9 +228,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         ids[0] = metadataHelper().getId("pay", address(hook));
         vm.startPrank(user);
         usdc.approve(address(jbMultiTerminal()), amt);
-        jbMultiTerminal().pay(
-            _pid, address(usdc), amt, user, 0, "", metadataHelper().createMetadata(ids, data)
-        );
+        jbMultiTerminal().pay(_pid, address(usdc), amt, user, 0, "", metadataHelper().createMetadata(ids, data));
         vm.stopPrank();
     }
 
@@ -305,9 +296,8 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     }
 
     function _surplus() internal view returns (uint256) {
-        return jbMultiTerminal().currentSurplusOf(
-            _pid, jbMultiTerminal().accountingContextsOf(_pid), 6, uint32(uint160(address(usdc)))
-        );
+        return jbMultiTerminal()
+            .currentSurplusOf(_pid, jbMultiTerminal().accountingContextsOf(_pid), 6, uint32(uint160(address(usdc))));
     }
 
     function _generateTokenId(uint256 tierId, uint256 tokenNumber) internal pure returns (uint256) {
@@ -328,15 +318,16 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         bytes memory cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutIds));
 
         vm.prank(user);
-        JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
-            holder: user,
-            projectId: _pid,
-            cashOutCount: 0,
-            tokenToReclaim: address(usdc),
-            minTokensReclaimed: 0,
-            beneficiary: payable(user),
-            metadata: cashOutMetadata
-        });
+        JBMultiTerminal(address(jbMultiTerminal()))
+            .cashOutTokensOf({
+                holder: user,
+                projectId: _pid,
+                cashOutCount: 0,
+                tokenToReclaim: address(usdc),
+                minTokensReclaimed: 0,
+                beneficiary: payable(user),
+                metadata: cashOutMetadata
+            });
     }
 
     function _refundUSDC(address user, uint256 tid) internal {
@@ -345,15 +336,16 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         bytes memory cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutIds));
 
         vm.prank(user);
-        JBMultiTerminal(address(jbMultiTerminal())).cashOutTokensOf({
-            holder: user,
-            projectId: _pid,
-            cashOutCount: 0,
-            tokenToReclaim: address(usdc),
-            minTokensReclaimed: 0,
-            beneficiary: payable(user),
-            metadata: cashOutMetadata
-        });
+        JBMultiTerminal(address(jbMultiTerminal()))
+            .cashOutTokensOf({
+                holder: user,
+                projectId: _pid,
+                cashOutCount: 0,
+                tokenToReclaim: address(usdc),
+                minTokensReclaimed: 0,
+                beneficiary: payable(user),
+                metadata: cashOutMetadata
+            });
     }
 
     // =========================================================================
