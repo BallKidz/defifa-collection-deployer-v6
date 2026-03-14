@@ -248,7 +248,9 @@ library DefifaHookLib {
             cashOutCount = cumulativeMintPrice;
         } else {
             // If the game is in its scoring or complete phase, reclaim amount is based on the tier weights.
-            cashOutCount = mulDiv(surplusValue + _amountRedeemed, cumulativeCashOutWeight, TOTAL_CASHOUT_WEIGHT);
+            cashOutCount = mulDiv({
+                x: surplusValue + _amountRedeemed, y: cumulativeCashOutWeight, denominator: TOTAL_CASHOUT_WEIGHT
+            });
         }
     }
 
@@ -348,8 +350,8 @@ library DefifaHookLib {
         uint256 defifaAmount = _defifaToken.balanceOf(address(this)) * shareToBeneficiary / outOfTotal;
 
         // If there is an amount we should send, send it.
-        if (defifaAmount != 0) _defifaToken.safeTransfer(_beneficiary, defifaAmount);
-        if (baseProtocolAmount != 0) _baseProtocolToken.safeTransfer(_beneficiary, baseProtocolAmount);
+        if (defifaAmount != 0) _defifaToken.safeTransfer({to: _beneficiary, value: defifaAmount});
+        if (baseProtocolAmount != 0) _baseProtocolToken.safeTransfer({to: _beneficiary, value: baseProtocolAmount});
 
         emit ClaimedTokens(_beneficiary, defifaAmount, baseProtocolAmount, msg.sender);
 

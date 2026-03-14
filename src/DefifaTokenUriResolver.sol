@@ -160,8 +160,9 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
                 }
 
                 if (_gamePhase == DefifaGamePhase.SCORING || _gamePhase == DefifaGamePhase.COMPLETE) {
-                    uint256 _potPortion =
-                        mulDiv(_gamePot, _hook.cashOutWeightOf(_tokenId), _hook.TOTAL_CASHOUT_WEIGHT());
+                    uint256 _potPortion = mulDiv({
+                        x: _gamePot, y: _hook.cashOutWeightOf(_tokenId), denominator: _hook.TOTAL_CASHOUT_WEIGHT()
+                    });
                     _valueText = !_hook.cashOutWeightIsSet()
                         ? "Awaiting scorecard..."
                         : _formatBalance({

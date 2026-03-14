@@ -182,12 +182,12 @@ contract DefifaGovernor is Ownable, IDefifaGovernor {
             // e.g. holding 3 of 10 tokens → 3/10 * MAX_ATTESTATION_POWER_TIER attestation power from this tier.
             unchecked {
                 if (_tierAttestationUnitsForAccount != 0) {
-                    attestationPower += mulDiv(
-                        MAX_ATTESTATION_POWER_TIER,
-                        _tierAttestationUnitsForAccount,
-                        IDefifaHook(_metadata.dataHook)
+                    attestationPower += mulDiv({
+                        x: MAX_ATTESTATION_POWER_TIER,
+                        y: _tierAttestationUnitsForAccount,
+                        denominator: IDefifaHook(_metadata.dataHook)
                             .getPastTierTotalAttestationUnitsOf({tier: _tierId, timestamp: _timestamp})
-                    );
+                    });
                 }
             }
         }

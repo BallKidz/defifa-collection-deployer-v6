@@ -266,8 +266,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         if (context.cashOutCount > 0) revert JB721Hook_UnexpectedTokenCashedOut();
 
         // Fetch the cash out hook metadata using the corresponding metadata ID.
-        (bool metadataExists, bytes memory metadata) =
-            JBMetadataResolver.getDataFor(JBMetadataResolver.getId("cashOut", codeOrigin), context.metadata);
+        (bool metadataExists, bytes memory metadata) = JBMetadataResolver.getDataFor({
+            id: JBMetadataResolver.getId({purpose: "cashOut", target: codeOrigin}), metadata: context.metadata
+        });
 
         uint256[] memory decodedTokenIds;
 
@@ -283,7 +284,8 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
 
         // Use this contract as the only cash out hook.
         hookSpecifications = new JBCashOutHookSpecification[](1);
-        hookSpecifications[0] = JBCashOutHookSpecification(this, 0, abi.encode(_cumulativeMintPrice));
+        hookSpecifications[0] =
+            JBCashOutHookSpecification({hook: this, amount: 0, metadata: abi.encode(_cumulativeMintPrice)});
 
         // Compute the cash out count based on the game phase.
         cashOutCount = DefifaHookLib.computeCashOutCount({
@@ -573,7 +575,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             _tokenId = _tokenIds[_i];
 
             // Mint the token.
-            _mint(_reservedTokenBeneficiary, _tokenId);
+            _mint({to: _reservedTokenBeneficiary, tokenId: _tokenId});
 
             emit MintReservedToken(_tokenId, tierId, _reservedTokenBeneficiary, msg.sender);
 
@@ -614,9 +616,10 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         ) revert JB721Hook_InvalidCashOut();
 
         // Fetch the cash out hook metadata using the corresponding metadata ID.
-        (bool metadataExists, bytes memory metadata) = JBMetadataResolver.getDataFor(
-            JBMetadataResolver.getId("cashOut", METADATA_ID_TARGET), context.cashOutMetadata
-        );
+        (bool metadataExists, bytes memory metadata) = JBMetadataResolver.getDataFor({
+            id: JBMetadataResolver.getId({purpose: "cashOut", target: METADATA_ID_TARGET}),
+            metadata: context.cashOutMetadata
+        });
 
         if (!metadataExists) {
             revert();
@@ -865,7 +868,7 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             _tokenId = _tokenIds[_i];
 
             // Mint the tokens.
-            _mint(_beneficiary, _tokenId);
+            _mint({to: _beneficiary, tokenId: _tokenId});
 
             emit Mint(_tokenId, _mintTierIds[_i], _beneficiary, _amount, msg.sender);
 
@@ -889,8 +892,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             // Get the current amount for the sending delegate.
             uint208 _current = _delegateTierCheckpoints[_from][_tierId].latest();
             // Set the new amount for the sending delegate.
-            (uint256 _oldValue, uint256 _newValue) =
-                _delegateTierCheckpoints[_from][_tierId].push(uint48(block.timestamp), _current - uint208(_amount));
+            (uint256 _oldValue, uint256 _newValue) = _delegateTierCheckpoints[_from][_tierId].push({
+                key: uint48(block.timestamp), value: _current - uint208(_amount)
+            });
             emit TierDelegateAttestationsChanged(_from, _tierId, _oldValue, _newValue, msg.sender);
         }
 
@@ -899,8 +903,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             // Get the current amount for the receiving delegate.
             uint208 _current = _delegateTierCheckpoints[_to][_tierId].latest();
             // Set the new amount for the receiving delegate.
-            (uint256 _oldValue, uint256 _newValue) =
-                _delegateTierCheckpoints[_to][_tierId].push(uint48(block.timestamp), _current + uint208(_amount));
+            (uint256 _oldValue, uint256 _newValue) = _delegateTierCheckpoints[_to][_tierId].push({
+                key: uint48(block.timestamp), value: _current + uint208(_amount)
+            });
             emit TierDelegateAttestationsChanged(_to, _tierId, _oldValue, _newValue, msg.sender);
         }
     }
@@ -912,8 +917,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         if (context.amount.currency != pricingCurrency) revert DefifaHook_WrongCurrency();
 
         // Resolve the metadata.
-        (bool found, bytes memory metadata) =
-            JBMetadataResolver.getDataFor(JBMetadataResolver.getId("pay", codeOrigin), context.payerMetadata);
+        (bool found, bytes memory metadata) = JBMetadataResolver.getDataFor({
+            id: JBMetadataResolver.getId({purpose: "pay", target: codeOrigin}), metadata: context.payerMetadata
+        });
 
         if (!found) revert DefifaHook_NothingToMint();
 
@@ -987,13 +993,13 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             // If minting, add to the total tier checkpoints.
             if (_from == address(0)) {
                 // slither-disable-next-line unused-return
-                _totalTierCheckpoints[_tierId].push(uint48(block.timestamp), _current + uint208(_amount));
+                _totalTierCheckpoints[_tierId].push({key: uint48(block.timestamp), value: _current + uint208(_amount)});
             }
 
             // If burning, subtract from the total tier checkpoints.
             if (_to == address(0)) {
                 // slither-disable-next-line unused-return
-                _totalTierCheckpoints[_tierId].push(uint48(block.timestamp), _current - uint208(_amount));
+                _totalTierCheckpoints[_tierId].push({key: uint48(block.timestamp), value: _current - uint208(_amount)});
             }
         }
 

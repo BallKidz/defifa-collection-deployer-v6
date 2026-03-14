@@ -34,7 +34,7 @@ library DefifaDeploymentLib {
 
         for (uint256 _i; _i < networks.length; _i++) {
             if (networks[_i].chainId == chainId) {
-                return getDeployment(path, networks[_i].name);
+                return getDeployment({path: path, network_name: networks[_i].name});
             }
         }
 
@@ -49,14 +49,32 @@ library DefifaDeploymentLib {
         view
         returns (DefifaDeployment memory deployment)
     {
-        deployment.hook = DefifaHook(_getDeploymentAddress(path, PROJECT_NAME, network_name, "DefifaHook"));
+        deployment.hook = DefifaHook(
+            _getDeploymentAddress({
+                path: path, project_name: PROJECT_NAME, network_name: network_name, contractName: "DefifaHook"
+            })
+        );
 
-        deployment.deployer = DefifaDeployer(_getDeploymentAddress(path, PROJECT_NAME, network_name, "DefifaDeployer"));
+        deployment.deployer = DefifaDeployer(
+            _getDeploymentAddress({
+                path: path, project_name: PROJECT_NAME, network_name: network_name, contractName: "DefifaDeployer"
+            })
+        );
 
-        deployment.governor = DefifaGovernor(_getDeploymentAddress(path, PROJECT_NAME, network_name, "DefifaGovernor"));
+        deployment.governor = DefifaGovernor(
+            _getDeploymentAddress({
+                path: path, project_name: PROJECT_NAME, network_name: network_name, contractName: "DefifaGovernor"
+            })
+        );
 
-        deployment.tokenUriResolver =
-            DefifaTokenUriResolver(_getDeploymentAddress(path, PROJECT_NAME, network_name, "DefifaTokenUriResolver"));
+        deployment.tokenUriResolver = DefifaTokenUriResolver(
+            _getDeploymentAddress({
+                path: path,
+                project_name: PROJECT_NAME,
+                network_name: network_name,
+                contractName: "DefifaTokenUriResolver"
+            })
+        );
     }
 
     /// @notice Get the address of a contract that was deployed by the Deploy script.
@@ -78,6 +96,6 @@ library DefifaDeploymentLib {
     {
         string memory deploymentJson =
             vm.readFile(string.concat(path, project_name, "/", network_name, "/", contractName, ".json"));
-        return stdJson.readAddress(deploymentJson, ".address");
+        return stdJson.readAddress({json: deploymentJson, key: ".address"});
     }
 }
