@@ -1,20 +1,38 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/DefifaGovernor.sol";
-import "../src/DefifaDeployer.sol";
-import "../src/DefifaHook.sol";
-import "../src/DefifaTokenUriResolver.sol";
-import "@bananapus/721-hook-v6/src/JB721TiersHookStore.sol";
+import {DefifaGovernor} from "../src/DefifaGovernor.sol";
+import {DefifaDeployer} from "../src/DefifaDeployer.sol";
+import {DefifaHook} from "../src/DefifaHook.sol";
+import {DefifaTokenUriResolver} from "../src/DefifaTokenUriResolver.sol";
+import {JB721TiersHookStore} from "@bananapus/721-hook-v6/src/JB721TiersHookStore.sol";
 
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
-import {MetadataResolverHelper} from "@bananapus/core-v6/test/helpers/MetadataResolverHelper.sol";
-import "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {TestBaseWorkflow} from "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {JBTest} from "@bananapus/core-v6/test/helpers/JBTest.sol";
-import "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
-import "@bananapus/721-hook-v6/src/libraries/JB721TiersRulesetMetadataResolver.sol";
-import "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
+import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
+import {JBAddressRegistry} from "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
+import {IJB721TokenUriResolver} from "@bananapus/721-hook-v6/src/interfaces/IJB721TokenUriResolver.sol";
+import {JB721Tier} from "@bananapus/721-hook-v6/src/structs/JB721Tier.sol";
+import {DefifaDelegation} from "../src/structs/DefifaDelegation.sol";
+import {DefifaLaunchProjectData} from "../src/structs/DefifaLaunchProjectData.sol";
+import {DefifaTierParams} from "../src/structs/DefifaTierParams.sol";
+import {DefifaTierCashOutWeight} from "../src/structs/DefifaTierCashOutWeight.sol";
+import {DefifaGamePhase} from "../src/enums/DefifaGamePhase.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
+import {JBTerminalConfig} from "@bananapus/core-v6/src/structs/JBTerminalConfig.sol";
+import {JBRulesetConfig} from "@bananapus/core-v6/src/structs/JBRulesetConfig.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
+import {JBSplitGroup} from "@bananapus/core-v6/src/structs/JBSplitGroup.sol";
+import {JBFundAccessLimitGroup} from "@bananapus/core-v6/src/structs/JBFundAccessLimitGroup.sol";
+import {JBSplit} from "@bananapus/core-v6/src/structs/JBSplit.sol";
+import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
+import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
+import {JBMultiTerminal} from "@bananapus/core-v6/src/JBMultiTerminal.sol";
 
 /// @title DefifaNoContestTest
 /// @notice Tests for the NO_CONTEST safety mechanisms: minParticipation threshold and scorecardTimeout.
@@ -802,6 +820,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
             attestationStartTime: 0,
             attestationGracePeriod: 100_381,
             defaultAttestationDelegate: address(0),
+            // forge-lint: disable-next-line(unsafe-typecast)
             tierPrice: uint104(tierPrice),
             tiers: tp,
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
@@ -830,6 +849,7 @@ contract DefifaNoContestTest is JBTest, TestBaseWorkflow {
     function _mint(address user, uint256 tid, uint256 amt) internal {
         vm.deal(user, amt);
         uint16[] memory m = new uint16[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         m[0] = uint16(tid);
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encode(user, m);

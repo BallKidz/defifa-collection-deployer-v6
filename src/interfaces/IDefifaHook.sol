@@ -46,11 +46,11 @@ interface IDefifaHook is IJB721Hook {
 
     /// @notice The Defifa project token used for token allocations.
     /// @return The Defifa ERC-20 token.
-    function defifaToken() external view returns (IERC20);
+    function DEFIFA_TOKEN() external view returns (IERC20);
 
     /// @notice The base protocol token used for token allocations.
     /// @return The base protocol ERC-20 token.
-    function baseProtocolToken() external view returns (IERC20);
+    function BASE_PROTOCOL_TOKEN() external view returns (IERC20);
 
     /// @notice The cash out weight of a specific token based on its tier's scorecard weight.
     /// @param tokenId The token ID to look up.
@@ -63,7 +63,7 @@ interface IDefifaHook is IJB721Hook {
 
     /// @notice The address of the code origin contract used as an implementation for clones.
     /// @return The code origin address.
-    function codeOrigin() external view returns (address);
+    function CODE_ORIGIN() external view returns (address);
 
     /// @notice Whether the cash out weights have been set by the game's governor.
     /// @return True if cash out weights are set.

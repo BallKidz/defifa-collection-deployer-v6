@@ -33,35 +33,35 @@ interface IDefifaDeployer {
 
     /// @notice The split group ID used for distributing game pot funds.
     /// @return The split group.
-    function splitGroup() external view returns (uint256);
+    function SPLIT_GROUP() external view returns (uint256);
 
     /// @notice The Juicebox project ID of the Defifa project.
     /// @return The project ID.
-    function defifaProjectId() external view returns (uint256);
+    function DEFIFA_PROJECT_ID() external view returns (uint256);
 
     /// @notice The Juicebox project ID of the base protocol project.
     /// @return The project ID.
-    function baseProtocolProjectId() external view returns (uint256);
+    function BASE_PROTOCOL_PROJECT_ID() external view returns (uint256);
 
     /// @notice The code origin address used as an implementation for hook clones.
     /// @return The code origin address.
-    function hookCodeOrigin() external view returns (address);
+    function HOOK_CODE_ORIGIN() external view returns (address);
 
     /// @notice The token URI resolver used for game NFT metadata.
     /// @return The token URI resolver contract.
-    function tokenUriResolver() external view returns (IJB721TokenUriResolver);
+    function TOKEN_URI_RESOLVER() external view returns (IJB721TokenUriResolver);
 
     /// @notice The governor contract used for scorecard governance.
     /// @return The governor contract.
-    function governor() external view returns (IDefifaGovernor);
+    function GOVERNOR() external view returns (IDefifaGovernor);
 
     /// @notice The Juicebox controller used to manage projects.
     /// @return The controller contract.
-    function controller() external view returns (IJBController);
+    function CONTROLLER() external view returns (IJBController);
 
     /// @notice The address registry used for content-addressable deployment lookups.
     /// @return The address registry contract.
-    function registry() external view returns (IJBAddressRegistry);
+    function REGISTRY() external view returns (IJBAddressRegistry);
 
     /// @notice The fee divisor for Defifa fees (100 / fee percent).
     /// @return The fee divisor.

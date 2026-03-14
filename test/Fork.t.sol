@@ -1,20 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/DefifaGovernor.sol";
-import "../src/DefifaDeployer.sol";
-import "../src/DefifaHook.sol";
-import "../src/DefifaTokenUriResolver.sol";
-import "@bananapus/721-hook-v6/src/JB721TiersHookStore.sol";
+import {DefifaGovernor} from "../src/DefifaGovernor.sol";
+import {DefifaDeployer} from "../src/DefifaDeployer.sol";
+import {DefifaHook} from "../src/DefifaHook.sol";
+import {DefifaTokenUriResolver} from "../src/DefifaTokenUriResolver.sol";
+import {JB721TiersHookStore} from "@bananapus/721-hook-v6/src/JB721TiersHookStore.sol";
 
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
-import {MetadataResolverHelper} from "@bananapus/core-v6/test/helpers/MetadataResolverHelper.sol";
-import "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {TestBaseWorkflow} from "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {JBTest} from "@bananapus/core-v6/test/helpers/JBTest.sol";
-import "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
-import "@bananapus/721-hook-v6/src/libraries/JB721TiersRulesetMetadataResolver.sol";
-import "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
+import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
+import {JBAddressRegistry} from "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
@@ -26,6 +22,22 @@ import {DefifaTierParams} from "../src/structs/DefifaTierParams.sol";
 import {DefifaTierCashOutWeight} from "../src/structs/DefifaTierCashOutWeight.sol";
 import {DefifaGamePhase} from "../src/enums/DefifaGamePhase.sol";
 import {DefifaScorecardState} from "../src/enums/DefifaScorecardState.sol";
+import {DefifaHookLib} from "../src/libraries/DefifaHookLib.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
+import {JBTerminalConfig} from "@bananapus/core-v6/src/structs/JBTerminalConfig.sol";
+import {JBRulesetConfig} from "@bananapus/core-v6/src/structs/JBRulesetConfig.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
+import {JBSplitGroup} from "@bananapus/core-v6/src/structs/JBSplitGroup.sol";
+import {JBFundAccessLimitGroup} from "@bananapus/core-v6/src/structs/JBFundAccessLimitGroup.sol";
+import {JBSplit} from "@bananapus/core-v6/src/structs/JBSplit.sol";
+import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
+import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
+import {JBMultiTerminal} from "@bananapus/core-v6/src/JBMultiTerminal.sol";
+import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
+import {IJBSplitHook} from "@bananapus/core-v6/src/interfaces/IJBSplitHook.sol";
+import {JB721TiersMintReservesConfig} from "@bananapus/721-hook-v6/src/structs/JB721TiersMintReservesConfig.sol";
 
 /// @dev Helper to read block.timestamp via an external call, bypassing the via-ir optimizer's timestamp caching.
 contract TimestampReader {
@@ -132,6 +144,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
         jbPermissions()
             .setPermissionsFor(
                 projectOwner,
+                // forge-lint: disable-next-line(unsafe-typecast)
                 JBPermissionsData({
                     operator: address(deployer), projectId: uint64(_defifaProjectId), permissionIds: permissionIds
                 })
@@ -514,6 +527,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
             sc[i].cashOutWeight = _nft.TOTAL_CASHOUT_WEIGHT() / 8;
         }
         // Fix rounding for last tier.
+        // forge-lint: disable-next-line(divide-before-multiply)
         sc[7].cashOutWeight = _nft.TOTAL_CASHOUT_WEIGHT() - ((_nft.TOTAL_CASHOUT_WEIGHT() / 8) * 7);
 
         vm.expectRevert(DefifaGovernor.DefifaGovernor_UnownedProposedCashoutValue.selector);
@@ -1868,9 +1882,9 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
 
     function test_fork_fuzz_fundConservation(uint8 rawTiers, uint8 rawPlayers) external {
         uint8 nTiers = uint8(bound(rawTiers, 2, 12));
-        uint8 nPPT = uint8(bound(rawPlayers, 1, 3));
+        uint8 nPpt = uint8(bound(rawPlayers, 1, 3));
 
-        _setupMultiN(nTiers, nPPT, 1 ether);
+        _setupMultiN(nTiers, nPpt, 1 ether);
         _toScoring();
 
         uint256 tw = _nft.TOTAL_CASHOUT_WEIGHT();
@@ -1891,8 +1905,8 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
         uint256 total;
         for (uint256 i; i < _users.length; i++) {
             uint256 bb = _users[i].balance;
-            uint256 tid = (i / nPPT) + 1;
-            uint256 tnum = (i % nPPT) + 1;
+            uint256 tid = (i / nPpt) + 1;
+            uint256 tnum = (i % nPpt) + 1;
             _cashOut(_users[i], tid, tnum);
             total += _users[i].balance - bb;
         }
@@ -2130,15 +2144,15 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
         }
     }
 
-    function _setupMultiN(uint8 nTiers, uint8 nPPT, uint256 tierPrice) internal {
+    function _setupMultiN(uint8 nTiers, uint8 nPpt, uint256 tierPrice) internal {
         DefifaLaunchProjectData memory d = _launchData(nTiers, tierPrice);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
-        uint256 total = uint256(nTiers) * uint256(nPPT);
+        uint256 total = uint256(nTiers) * uint256(nPpt);
         _users = new address[](total);
         uint256 idx;
         for (uint256 t; t < nTiers; t++) {
-            for (uint256 p; p < nPPT; p++) {
+            for (uint256 p; p < nPpt; p++) {
                 _users[idx] = _addr(idx);
                 _mint(_users[idx], t + 1, tierPrice);
                 _delegateSelf(_users[idx], t + 1);
@@ -2196,6 +2210,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
             attestationStartTime: 0,
             attestationGracePeriod: 100_381,
             defaultAttestationDelegate: address(0),
+            // forge-lint: disable-next-line(unsafe-typecast)
             tierPrice: uint104(tierPrice),
             tiers: _makeTierParams(n),
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
@@ -2227,6 +2242,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
             attestationStartTime: 0,
             attestationGracePeriod: 100_381,
             defaultAttestationDelegate: address(0),
+            // forge-lint: disable-next-line(unsafe-typecast)
             tierPrice: uint104(tierPrice),
             tiers: _makeTierParams(n),
             defaultTokenUriResolver: IJB721TokenUriResolver(address(0)),
@@ -2264,6 +2280,7 @@ contract DefifaForkTest is JBTest, TestBaseWorkflow {
     function _mint(address user, uint256 tid, uint256 amt) internal {
         vm.deal(user, amt);
         uint16[] memory m = new uint16[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         m[0] = uint16(tid);
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encode(user, m);

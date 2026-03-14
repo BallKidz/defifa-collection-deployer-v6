@@ -892,9 +892,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             // Get the current amount for the sending delegate.
             uint208 _current = _delegateTierCheckpoints[_from][_tierId].latest();
             // Set the new amount for the sending delegate.
-            // Casting to uint208 is safe because attestation unit amounts are bounded by NFT supply counts.
             // forge-lint: disable-next-line(unsafe-typecast)
             (uint256 _oldValue, uint256 _newValue) = _delegateTierCheckpoints[_from][_tierId].push({
+                // forge-lint: disable-next-line(unsafe-typecast)
                 key: uint48(block.timestamp), value: _current - uint208(_amount)
             });
             emit TierDelegateAttestationsChanged(_from, _tierId, _oldValue, _newValue, msg.sender);
@@ -904,10 +904,10 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
         if (_to != address(0)) {
             // Get the current amount for the receiving delegate.
             uint208 _current = _delegateTierCheckpoints[_to][_tierId].latest();
-            // Casting to uint208 is safe because attestation unit amounts are bounded by NFT supply counts.
-            // forge-lint: disable-next-line(unsafe-typecast)
             // Set the new amount for the receiving delegate.
+            // forge-lint: disable-next-line(unsafe-typecast)
             (uint256 _oldValue, uint256 _newValue) = _delegateTierCheckpoints[_to][_tierId].push({
+                // forge-lint: disable-next-line(unsafe-typecast)
                 key: uint48(block.timestamp), value: _current + uint208(_amount)
             });
             emit TierDelegateAttestationsChanged(_to, _tierId, _oldValue, _newValue, msg.sender);

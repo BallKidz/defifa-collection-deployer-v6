@@ -40,8 +40,8 @@ contract DefifaTokenUriResolver is IDefifaTokenUriResolver, IJB721TokenUriResolv
     // -------------------------- constructor ---------------------------- //
     //*********************************************************************//
 
-    constructor(ITypeface _TYPEFACE) {
-        TYPEFACE = _TYPEFACE;
+    constructor(ITypeface _typeface) {
+        TYPEFACE = _typeface;
     }
 
     //*********************************************************************//

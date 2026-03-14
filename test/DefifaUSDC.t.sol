@@ -1,32 +1,38 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/DefifaGovernor.sol";
-import "../src/DefifaDeployer.sol";
-import "../src/DefifaHook.sol";
-import "../src/DefifaTokenUriResolver.sol";
-import "@bananapus/721-hook-v6/src/JB721TiersHookStore.sol";
+import {DefifaGovernor} from "../src/DefifaGovernor.sol";
+import {DefifaDeployer} from "../src/DefifaDeployer.sol";
+import {DefifaHook} from "../src/DefifaHook.sol";
+import {DefifaTokenUriResolver} from "../src/DefifaTokenUriResolver.sol";
+import {JB721TiersHookStore} from "@bananapus/721-hook-v6/src/JB721TiersHookStore.sol";
 
-import {JBMetadataResolver} from "@bananapus/core-v6/src/libraries/JBMetadataResolver.sol";
-import {MetadataResolverHelper} from "@bananapus/core-v6/test/helpers/MetadataResolverHelper.sol";
-import "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
+import {TestBaseWorkflow} from "@bananapus/core-v6/test/helpers/TestBaseWorkflow.sol";
 import {JBTest} from "@bananapus/core-v6/test/helpers/JBTest.sol";
-import "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
-import "@bananapus/721-hook-v6/src/libraries/JB721TiersRulesetMetadataResolver.sol";
-import "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
+import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
+import {JBAddressRegistry} from "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
 import {IJB721TokenUriResolver} from "@bananapus/721-hook-v6/src/interfaces/IJB721TokenUriResolver.sol";
-import {JB721Tier} from "@bananapus/721-hook-v6/src/structs/JB721Tier.sol";
 import {DefifaDelegation} from "../src/structs/DefifaDelegation.sol";
 import {DefifaLaunchProjectData} from "../src/structs/DefifaLaunchProjectData.sol";
 import {DefifaTierParams} from "../src/structs/DefifaTierParams.sol";
 import {DefifaTierCashOutWeight} from "../src/structs/DefifaTierCashOutWeight.sol";
 import {DefifaGamePhase} from "../src/enums/DefifaGamePhase.sol";
-import {DefifaScorecardState} from "../src/enums/DefifaScorecardState.sol";
+import {JBAccountingContext} from "@bananapus/core-v6/src/structs/JBAccountingContext.sol";
+import {JBTerminalConfig} from "@bananapus/core-v6/src/structs/JBTerminalConfig.sol";
+import {JBRulesetConfig} from "@bananapus/core-v6/src/structs/JBRulesetConfig.sol";
+import {JBRulesetMetadata} from "@bananapus/core-v6/src/structs/JBRulesetMetadata.sol";
+import {JBSplitGroup} from "@bananapus/core-v6/src/structs/JBSplitGroup.sol";
+import {JBFundAccessLimitGroup} from "@bananapus/core-v6/src/structs/JBFundAccessLimitGroup.sol";
+import {JBSplit} from "@bananapus/core-v6/src/structs/JBSplit.sol";
+import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
+import {JBConstants} from "@bananapus/core-v6/src/libraries/JBConstants.sol";
+import {IJBRulesetApprovalHook} from "@bananapus/core-v6/src/interfaces/IJBRulesetApprovalHook.sol";
+import {JBMultiTerminal} from "@bananapus/core-v6/src/JBMultiTerminal.sol";
+import {JBPermissionsData} from "@bananapus/core-v6/src/structs/JBPermissionsData.sol";
 
 /// @notice Mock USDC token with 6 decimals.
 contract DefifaMockUSDC is ERC20 {
@@ -146,6 +152,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         jbPermissions()
             .setPermissionsFor(
                 projectOwner,
+                // forge-lint: disable-next-line(unsafe-typecast)
                 JBPermissionsData({
                     operator: address(deployer), projectId: uint64(_defifaProjectId), permissionIds: permissionIds
                 })
@@ -159,11 +166,11 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     // USDC LAUNCH DATA HELPERS
     // =========================================================================
 
-    function _launchDataUSDC(uint8 n, uint104 tierPrice) internal returns (DefifaLaunchProjectData memory) {
-        return _launchDataUSDCWith(n, tierPrice, 0, 0);
+    function _launchDataUsdc(uint8 n, uint104 tierPrice) internal returns (DefifaLaunchProjectData memory) {
+        return _launchDataUsdcWith(n, tierPrice, 0, 0);
     }
 
-    function _launchDataUSDCWith(
+    function _launchDataUsdcWith(
         uint8 n,
         uint104 tierPrice,
         uint256 minParticipation,
@@ -218,9 +225,10 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         return address(bytes20(keccak256(abi.encode("usdc_user", i))));
     }
 
-    function _mintUSDC(address user, uint256 tid, uint104 amt) internal {
+    function _mintUsdc(address user, uint256 tid, uint104 amt) internal {
         usdc.mint(user, amt);
         uint16[] memory m = new uint16[](1);
+        // forge-lint: disable-next-line(unsafe-typecast)
         m[0] = uint16(tid);
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encode(user, m);
@@ -278,14 +286,14 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         vm.warp(_tsReader.timestamp() + 3 days + 1);
     }
 
-    function _setupGameUSDC(uint8 nTiers, uint104 tierPrice) internal {
-        DefifaLaunchProjectData memory d = _launchDataUSDC(nTiers, tierPrice);
+    function _setupGameUsdc(uint8 nTiers, uint104 tierPrice) internal {
+        DefifaLaunchProjectData memory d = _launchDataUsdc(nTiers, tierPrice);
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
         _users = new address[](nTiers);
         for (uint256 i; i < nTiers; i++) {
             _users[i] = _addr(i);
-            _mintUSDC(_users[i], i + 1, tierPrice);
+            _mintUsdc(_users[i], i + 1, tierPrice);
             _delegateSelf(_users[i], i + 1);
             vm.warp(_tsReader.timestamp() + 1);
         }
@@ -312,7 +320,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
         return metadataHelper().createMetadata(ids, datas);
     }
 
-    function _cashOutUSDC(address user, uint256 tid, uint256 tnum) internal {
+    function _cashOutUsdc(address user, uint256 tid, uint256 tnum) internal {
         uint256[] memory cashOutIds = new uint256[](1);
         cashOutIds[0] = _generateTokenId(tid, tnum);
         bytes memory cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutIds));
@@ -330,7 +338,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
             });
     }
 
-    function _refundUSDC(address user, uint256 tid) internal {
+    function _refundUsdc(address user, uint256 tid) internal {
         uint256[] memory cashOutIds = new uint256[](1);
         cashOutIds[0] = _generateTokenId(tid, 1);
         bytes memory cashOutMetadata = _buildCashOutMetadata(abi.encode(cashOutIds));
@@ -355,7 +363,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     /// @notice Test 1: Mint and refund with USDC.
     function test_defifa_usdc_mintAndRefund() external {
         uint104 tierPrice = 100e6; // 100 USDC
-        _setupGameUSDC(4, tierPrice);
+        _setupGameUsdc(4, tierPrice);
 
         // Verify MINT phase.
         assertEq(uint256(deployer.currentGamePhaseOf(_pid)), uint256(DefifaGamePhase.MINT));
@@ -370,7 +378,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
 
         // Refund user 0 during MINT phase.
         uint256 balBefore = usdc.balanceOf(_users[0]);
-        _refundUSDC(_users[0], 1);
+        _refundUsdc(_users[0], 1);
         assertEq(usdc.balanceOf(_users[0]) - balBefore, 100e6, "refund = 100 USDC");
         assertEq(_nft.balanceOf(_users[0]), 0, "NFT burned on refund");
 
@@ -381,7 +389,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     /// @notice Test 2: Scorecard and distribute with USDC.
     function test_defifa_usdc_scorecardAndDistribute() external {
         uint104 tierPrice = 100e6;
-        _setupGameUSDC(4, tierPrice);
+        _setupGameUsdc(4, tierPrice);
 
         _toScoring();
 
@@ -394,14 +402,14 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
 
         // Winner cashes out -> receives USDC.
         uint256 winnerBalBefore = usdc.balanceOf(_users[0]);
-        _cashOutUSDC(_users[0], 1, 1);
+        _cashOutUsdc(_users[0], 1, 1);
         uint256 winnerReceived = usdc.balanceOf(_users[0]) - winnerBalBefore;
         assertGt(winnerReceived, 0, "winner received USDC");
 
         // Losers get 0 USDC.
         for (uint256 i = 1; i < 4; i++) {
             uint256 bb = usdc.balanceOf(_users[i]);
-            _cashOutUSDC(_users[i], i + 1, 1);
+            _cashOutUsdc(_users[i], i + 1, 1);
             assertEq(usdc.balanceOf(_users[i]), bb, "loser gets 0 USDC");
         }
     }
@@ -409,7 +417,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     /// @notice Test 3: Fee accounting with USDC (6-decimal precision).
     function test_defifa_usdc_feeAccounting() external {
         uint104 tierPrice = 100e6;
-        _setupGameUSDC(4, tierPrice);
+        _setupGameUsdc(4, tierPrice);
 
         uint256 potBefore = _balance();
         assertEq(potBefore, 400e6, "pot = 400 USDC");
@@ -432,14 +440,14 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     /// @notice Test 4: No-contest with USDC (minParticipation threshold).
     function test_defifa_usdc_noContest() external {
         uint104 tierPrice = 100e6;
-        DefifaLaunchProjectData memory d = _launchDataUSDCWith(4, tierPrice, 500e6, 0); // 500 USDC min
+        DefifaLaunchProjectData memory d = _launchDataUsdcWith(4, tierPrice, 500e6, 0); // 500 USDC min
         (_pid, _nft, _gov) = _launch(d);
         vm.warp(d.start - d.mintPeriodDuration - d.refundPeriodDuration);
 
         // Mint only 1 tier = 100 USDC < 500 USDC threshold.
         _users = new address[](1);
         _users[0] = _addr(0);
-        _mintUSDC(_users[0], 1, tierPrice);
+        _mintUsdc(_users[0], 1, tierPrice);
 
         _toScoring();
 
@@ -450,7 +458,7 @@ contract DefifaUSDCTest is JBTest, TestBaseWorkflow {
     /// @notice Test 5: Game pot reporting with USDC.
     function test_defifa_usdc_potCalculation() external {
         uint104 tierPrice = 100e6;
-        _setupGameUSDC(4, tierPrice);
+        _setupGameUsdc(4, tierPrice);
 
         _toScoring();
 
