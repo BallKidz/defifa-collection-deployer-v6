@@ -323,7 +323,8 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         if (_pot == 0) revert DefifaDeployer_NothingToFulfill();
 
         // Compute the fee amount based on the total absolute split percent stored at game creation.
-        uint256 _feeAmount = mulDiv(_pot, _commitmentPercentOf[gameId], JBConstants.SPLITS_TOTAL_PERCENT);
+        uint256 _feeAmount =
+            mulDiv({x: _pot, y: _commitmentPercentOf[gameId], denominator: JBConstants.SPLITS_TOTAL_PERCENT});
 
         // Store the actual fee amount for accurate currentGamePotOf reporting.
         // Use max(feeAmount, 1) to preserve the reentrancy guard when pot is 0.
@@ -523,7 +524,9 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         // cloneDeterministic with msg.sender in the salt prevents this since a different
         // caller produces a different address.
         DefifaHook _hook = DefifaHook(
-            Clones.cloneDeterministic(hookCodeOrigin, keccak256(abi.encodePacked(msg.sender, _currentNonce)))
+            Clones.cloneDeterministic({
+                implementation: hookCodeOrigin, salt: keccak256(abi.encodePacked(msg.sender, _currentNonce))
+            })
         );
 
         // Use the default uri resolver if provided, else use the hardcoded generic default.
@@ -857,14 +860,20 @@ contract DefifaDeployer is IDefifaDeployer, IDefifaGamePhaseReporter, IDefifaGam
         uint256 _normalizedTotal;
         for (uint256 _i; _i < _numberOfUserSplits; _i++) {
             _splits[_i] = _initialSplits[_i];
-            _splits[_i].percent =
-                uint32(mulDiv(_initialSplits[_i].percent, JBConstants.SPLITS_TOTAL_PERCENT, _totalAbsolutePercent));
+            _splits[_i].percent = uint32(
+                mulDiv({
+                    x: _initialSplits[_i].percent,
+                    y: JBConstants.SPLITS_TOTAL_PERCENT,
+                    denominator: _totalAbsolutePercent
+                })
+            );
             _normalizedTotal += _splits[_i].percent;
         }
 
         // Add Defifa fee split (normalized).
-        uint256 _defifaNormalized =
-            mulDiv(_defifaAbsolutePercent, JBConstants.SPLITS_TOTAL_PERCENT, _totalAbsolutePercent);
+        uint256 _defifaNormalized = mulDiv({
+            x: _defifaAbsolutePercent, y: JBConstants.SPLITS_TOTAL_PERCENT, denominator: _totalAbsolutePercent
+        });
         _splits[_numberOfUserSplits] = JBSplit({
             preferAddToBalance: false,
             percent: uint32(_defifaNormalized),
