@@ -69,10 +69,7 @@ library DefifaDeploymentLib {
 
         deployment.tokenUriResolver = DefifaTokenUriResolver(
             _getDeploymentAddress({
-                path: path,
-                projectName: PROJECT_NAME,
-                networkName: networkName,
-                contractName: "DefifaTokenUriResolver"
+                path: path, projectName: PROJECT_NAME, networkName: networkName, contractName: "DefifaTokenUriResolver"
             })
         );
     }
@@ -95,8 +92,8 @@ library DefifaDeploymentLib {
         returns (address)
     {
         string memory deploymentJson =
-            // forge-lint: disable-next-line(unsafe-cheatcode)
-            VM.readFile(string.concat(path, projectName, "/", networkName, "/", contractName, ".json"));
+        // forge-lint: disable-next-line(unsafe-cheatcode)
+        VM.readFile(string.concat(path, projectName, "/", networkName, "/", contractName, ".json"));
         return stdJson.readAddress({json: deploymentJson, key: ".address"});
     }
 }

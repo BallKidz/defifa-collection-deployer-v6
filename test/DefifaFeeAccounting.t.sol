@@ -11,7 +11,7 @@ import {TestBaseWorkflow} from "@bananapus/core-v6/test/helpers/TestBaseWorkflow
 import {JBTest} from "@bananapus/core-v6/test/helpers/JBTest.sol";
 import {JBRulesetMetadataResolver} from "@bananapus/core-v6/src/libraries/JBRulesetMetadataResolver.sol";
 import {JBRuleset} from "@bananapus/core-v6/src/structs/JBRuleset.sol";
-import {JB721TiersRulesetMetadataResolver} from "@bananapus/721-hook-v6/src/libraries/JB721TiersRulesetMetadataResolver.sol";
+
 import {JBAddressRegistry} from "@bananapus/address-registry-v6/src/JBAddressRegistry.sol";
 import {JBPermissionIds} from "@bananapus/permission-ids-v6/src/JBPermissionIds.sol";
 import {DefifaLaunchProjectData} from "../src/structs/DefifaLaunchProjectData.sol";
@@ -33,7 +33,6 @@ import {JBMultiTerminal} from "@bananapus/core-v6/src/JBMultiTerminal.sol";
 import {JBPermissionsData} from "@bananapus/core-v6/src/interfaces/IJBPermissions.sol";
 import {JBCurrencyIds} from "@bananapus/core-v6/src/libraries/JBCurrencyIds.sol";
 import {ITypeface} from "lib/typeface/contracts/interfaces/ITypeface.sol";
-
 
 /// @notice Tests for PR #22 (M-D8): fee accounting after removing duplicate nana fee.
 /// Verifies that only the fee portion of the pot is sent as payouts during fulfillment,

@@ -895,7 +895,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             // forge-lint: disable-next-line(unsafe-typecast)
             (uint256 _oldValue, uint256 _newValue) = _delegateTierCheckpoints[_from][_tierId].push({
                 // forge-lint: disable-next-line(unsafe-typecast)
-                key: uint48(block.timestamp), value: _current - uint208(_amount)
+                key: uint48(block.timestamp),
+                // forge-lint: disable-next-line(unsafe-typecast)
+                value: _current - uint208(_amount)
             });
             emit TierDelegateAttestationsChanged(_from, _tierId, _oldValue, _newValue, msg.sender);
         }
@@ -908,7 +910,9 @@ contract DefifaHook is JB721Hook, Ownable, IDefifaHook {
             // forge-lint: disable-next-line(unsafe-typecast)
             (uint256 _oldValue, uint256 _newValue) = _delegateTierCheckpoints[_to][_tierId].push({
                 // forge-lint: disable-next-line(unsafe-typecast)
-                key: uint48(block.timestamp), value: _current + uint208(_amount)
+                key: uint48(block.timestamp),
+                // forge-lint: disable-next-line(unsafe-typecast)
+                value: _current + uint208(_amount)
             });
             emit TierDelegateAttestationsChanged(_to, _tierId, _oldValue, _newValue, msg.sender);
         }
